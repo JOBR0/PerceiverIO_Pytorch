@@ -6,8 +6,8 @@ from typing import Sequence
 import torch.nn as nn
 import torch
 
-from core.Transformers.perceiver import PerceiverEncoder, FlowDecoder, Perceiver
-from core.Transformers import io_processors
+from perceiver_io.perceiver import PerceiverEncoder, FlowDecoder, Perceiver
+from perceiver_io import io_processors
 from timm.models.layers import to_2tuple
 
 import torch.nn.functional as F

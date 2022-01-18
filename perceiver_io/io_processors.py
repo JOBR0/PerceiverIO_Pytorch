@@ -28,8 +28,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from core.Transformers.perceiver import position_encoding
-from core.utils.utils import conv_output_shape, init_linear_from_haiku
+from perceiver_io.perceiver import position_encoding
+from perceiver_io.utils import conv_output_shape, init_linear_from_haiku
 
 ModalitySizeT = Mapping[str, int]
 PreprocessorOutputT = Tuple[torch.Tensor, Optional[torch.Tensor], torch.Tensor]

@@ -7,7 +7,7 @@ import torch
 
 from timm.models.layers import variance_scaling_
 
-from core.utils.utils import init_linear_from_haiku, init_layer_norm_from_haiku
+from perceiver_io.utils import init_linear_from_haiku, init_layer_norm_from_haiku
 
 
 def make_cross_attention_mask(query_mask, kv_mask):
