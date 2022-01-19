@@ -10,6 +10,35 @@ def load_image(imfile, device):
     img = torch.from_numpy(img).permute(2, 0, 1).float()
     return img[None].to(device)
 
+
+def same_padding(input_size: Sequence[int], kernel_size: Union[int, Sequence[int]],
+                      stride: Union[int, Sequence[int]] = 1, dims: int = 2):
+    """
+    Calculates the padding for a convolution with same padding and stride
+    If the padding isn't divisible by two, right and bottom will be 1 pixel larger
+    Args:
+        kernel_size (int): Size of kernel
+        stride (int): stride of convolution
+        dims (int): Number of dimension over which to perform convolution. Default: 2 for conv2D
+    """
+    if type(kernel_size) is int:
+        kernel_size = [kernel_size] * dims
+    if type(stride) is int:
+        stride = [stride] * dims
+
+    padding = []
+    for d in range(dims-1, 0, -1):
+        if input_size[d] % stride[d] == 0:
+            total_padding = kernel_size[d] - stride[d]
+        else:
+            total_padding = kernel_size[d] - (input_size[d] % stride[d])
+
+        left_padding = math.floor(total_padding / 2)
+        right_padding = math.ceil(total_padding / 2)
+        padding.append(left_padding)
+        padding.append(right_padding)
+    return padding
+
 def conv_output_shape(input_size: Sequence[int],
                       kernel_size: Union[int, Sequence[int]],
                       stride: Union[int, Sequence[int]] = 1,
