@@ -26,12 +26,15 @@ def same_padding(input_size: Sequence[int], kernel_size: Union[int, Sequence[int
     if type(stride) is int:
         stride = [stride] * dims
 
+    # Dimensions which stay the same
+    skip_dims = len(input_size) - dims
+
     padding = []
-    for d in range(dims-1, 0, -1):
-        if input_size[d] % stride[d] == 0:
+    for d in range(dims-1, -1, -1):
+        if input_size[d+skip_dims] % stride[d] == 0:
             total_padding = kernel_size[d] - stride[d]
         else:
-            total_padding = kernel_size[d] - (input_size[d] % stride[d])
+            total_padding = kernel_size[d] - (input_size[d+skip_dims] % stride[d])
 
         left_padding = math.floor(total_padding / 2)
         right_padding = math.ceil(total_padding / 2)
