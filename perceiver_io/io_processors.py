@@ -21,7 +21,7 @@ from typing import Any, Callable, Mapping, Optional, Sequence, Tuple
 
 import einops
 
-from timm.models.layers import lecun_normal_
+from timm.models.layers import lecun_normal_, trunc_normal_
 
 import numpy as np
 import torch
@@ -29,7 +29,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from perceiver_io.perceiver import position_encoding
-from perceiver_io.utils import conv_output_shape, init_linear_from_haiku
+from perceiver_io.utils import conv_output_shape, init_linear_from_haiku, same_padding
 
 ModalitySizeT = Mapping[str, int]
 PreprocessorOutputT = Tuple[torch.Tensor, Optional[torch.Tensor], torch.Tensor]
@@ -140,68 +140,65 @@ def patches_for_flow(inputs: torch.Tensor) -> torch.Tensor:
 #  ------------------------------------------------------------
 
 
-# class Conv2DDownsample(hk.Module):
-#     """Downsamples 4x by applying a 2D convolution and doing max pooling."""
-#
-#     def __init__(
-#             self,
-#             num_layers: int = 1,
-#             num_channels: int = 64,
-#             use_batchnorm: bool = True,
-#             bn_config: Optional[Mapping[str, float]] = None,
-#             name: Optional[str] = None,
-#     ):
-#         """Constructs a Conv2DDownsample model.
-#     Args:
-#       num_layers: The number of conv->max_pool layers.
-#       num_channels: The number of conv output channels.
-#       use_batchnorm: Whether to use batchnorm.
-#       bn_config: A dictionary of two elements, ``decay_rate`` and ``eps`` to be
-#         passed on to the :class:`~haiku.BatchNorm` layers. By default the
-#         ``decay_rate`` is ``0.9`` and ``eps`` is ``1e-5``.
-#       name: Name of the module.
-#     """
-#         super().__init__(name=name)
-#
-#         self._num_layers = num_layers
-#         self._use_batchnorm = use_batchnorm
-#
-#         bn_config = dict(bn_config or {})
-#         bn_config.setdefault('decay_rate', 0.9)
-#         bn_config.setdefault('eps', 1e-5)
-#         bn_config.setdefault('create_scale', True)
-#         bn_config.setdefault('create_offset', True)
-#
-#         self.layers = []
-#         for _ in range(self._num_layers):
-#             conv = hk.Conv2D(
-#                 output_channels=num_channels,
-#                 kernel_shape=7,
-#                 stride=2,
-#                 with_bias=False,
-#                 padding='SAME',
-#                 name='conv')
-#             if use_batchnorm:
-#                 batchnorm = hk.BatchNorm(name='batchnorm', **bn_config)
-#             else:
-#                 batchnorm = None
-#             self.layers.append(dict(conv=conv, batchnorm=batchnorm))
-#
-#     def __call__(self, inputs: jnp.ndarray, *,
-#                  is_training: bool,
-#                  test_local_stats: bool = False) -> jnp.ndarray:
-#         out = inputs
-#         for layer in self.layers:
-#             out = layer['conv'](out)
-#             if layer['batchnorm'] is not None:
-#                 out = layer['batchnorm'](out, is_training, test_local_stats)
-#             out = jax.nn.relu(out)
-#             out = hk.max_pool(out,
-#                               window_shape=(1, 3, 3, 1),
-#                               strides=(1, 2, 2, 1),
-#                               padding='SAME')
-#         return out
-#
+class Conv2DDownsample(nn.Module):
+    """Downsamples 4x by applying a 2D convolution and doing max pooling."""
+
+    def __init__(
+            self,
+            num_layers: int = 1,
+            in_channels: int = 64,
+            num_channels: int = 64,
+            use_batchnorm: bool = True
+    ):
+        """Constructs a Conv2DDownsample model.
+    Args:
+      num_layers: The number of conv->max_pool layers.
+      num_channels: The number of conv output channels.
+      use_batchnorm: Whether to use batchnorm.
+      name: Name of the module.
+    """
+        super().__init__()
+
+        self._num_layers = num_layers
+        self.norms = None
+        if use_batchnorm:
+            self.norms = nn.ModuleList()
+
+        self.convs = nn.ModuleList()
+        for _ in range(self._num_layers):
+            conv = nn.Conv2d(in_channels=in_channels,
+                             out_channels=num_channels,
+                             kernel_size=7,
+                             stride=2,
+                             bias=False)
+            trunc_normal_(conv.weight, mean=0.0, std=0.01)
+            self.convs.append(conv)
+            in_channels = num_channels
+
+            if use_batchnorm:
+                batchnorm = nn.BatchNorm2d(num_features=num_channels)
+                self.norms.append(batchnorm)
+
+
+    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
+        out = inputs
+        for l, conv in enumerate(self.convs):
+            pad = same_padding(out.shape[1:], conv.kernel_size, conv.stride, dims=2)
+            out = F.pad(out, pad, mode='constant', value=0.0)
+            out = conv(out)
+
+            if self.norms is not None:
+                out = self.norms[l](out)
+
+            out = F.relu(out)
+
+            pad = same_padding(out.shape[1:], 3, 2, dims=2)
+            out = F.pad(out, pad, mode='constant', value=0.0)
+
+            out = F.max_pool2d(out, kernel_size=3, stride=2)
+
+        return out
+
 #
 # class Conv2DUpsample(hk.Module):
 #     """Upsamples 4x using 2 2D transposed convolutions."""
@@ -315,7 +312,7 @@ class ImagePreprocessor(nn.Module):
             raise ValueError(
                 f'Invalid value {concat_or_add_pos} for concat_or_add_pos.')
 
-        if prep_type not in ["patches", "pixels"]:
+        if prep_type not in ["patches", "pixels", "conv"]:
             raise NotImplementedError
 
         self._prep_type = prep_type
@@ -326,19 +323,23 @@ class ImagePreprocessor(nn.Module):
 
         if self._prep_type == 'conv':
             raise NotImplementedError
-        #     # Downsampling with conv is currently restricted
-        #     convnet_num_layers = math.log(spatial_downsample, 4)
-        #     convnet_num_layers_is_int = (
-        #             convnet_num_layers == np.round(convnet_num_layers))
-        #     if not convnet_num_layers_is_int or temporal_downsample != 1:
-        #         raise ValueError('Only powers of 4 expected for spatial '
-        #                          'and 1 expected for temporal '
-        #                          'downsampling with conv.')
-        #
-        #     self.convnet = Conv2DDownsample(
-        #         num_layers=int(convnet_num_layers),
-        #         num_channels=num_channels,
-        #         use_batchnorm=conv2d_use_batchnorm)
+            # Downsampling with conv is currently restricted
+            convnet_num_layers = math.log(spatial_downsample, 4)
+            convnet_num_layers_is_int = (
+                    convnet_num_layers == np.round(convnet_num_layers))
+            if not convnet_num_layers_is_int or temporal_downsample != 1:
+                raise ValueError('Only powers of 4 expected for spatial '
+                                 'and 1 expected for temporal '
+                                 'downsampling with conv.')
+
+            self.convnet = Conv2DDownsample(
+                num_layers=int(convnet_num_layers),
+                num_channels=num_channels,
+                use_batchnorm=conv2d_use_batchnorm)
+
+
+            #TODO check why  is this init here?
+            variance_scaling_(self.convnet.weight, scale=init_scale, mode='fan_in', distribution='truncated_normal')
         elif self._prep_type == 'conv1x1':
             assert temporal_downsample == 1, 'conv1x1 does not downsample in time.'
             # self.convnet_1x1 = nn.Conv2d(
@@ -403,24 +404,28 @@ class ImagePreprocessor(nn.Module):
             pos=None,
             network_input_is_1d: bool = True) -> PreprocessorOutputT:
         if self._prep_type == 'conv':
-            raise NotImplementedError
-            # # Convnet image featurization.
-            # # Downsamples spatially by a factor of 4
-            # conv = self.convnet
-            # if len(inputs.shape) == 5:
-            #     conv = hk.BatchApply(conv)
-            #
-            # inputs = conv(inputs, is_training=is_training)
+            # Convnet image featurization.
+            # Downsamples spatially by a factor of 4
+            if len(inputs.shape) == 5:
+                b, t, _, _, _ = inputs.shape
+                inputs = inputs.view(b*t, *inputs.shape[2:])
+                inputs = self.convnet(inputs)
+                inputs = inputs.view(b, t, *inputs.shape[1:])
+            else:
+                inputs = self.convnet(inputs)
+
+
+
         elif self._prep_type == 'conv1x1':
             # maps inputs to 64d
+            if len(inputs.shape) == 5:
+                b, t, _, _, _ = inputs.shape
+                inputs = inputs.view(b*t, *inputs.shape[2:])
+                inputs = self.convnet_1x1(inputs)
+                inputs = inputs.view(b, t, *inputs.shape[1:])
+            else:
+                inputs = self.convnet_1x1(inputs)
 
-            conv = self.convnet_1x1
-
-            #TODO maybe merge dimensions into batch dimensions
-            #if len(inputs.shape) == 5:
-            #    #conv = hk.BatchApply(conv)
-
-            inputs = conv(inputs)
         elif self._prep_type == 'patches':
             # Space2depth featurization.
             # Video: B x T x H x W x C

@@ -21,9 +21,9 @@ from perceiver.position_encoding import \
     FourierPositionEncoding as FourierPositionEncoding_jax, TrainablePositionEncoding as TrainablePositionEncoding_jax, \
     _check_or_build_spatial_positions as _check_or_build_spatial_positions_jax, build_linear_positions as build_linear_positions_jax
 from perceiver.io_processors import extract_patches as extract_patches_jax, \
-    patches_for_flow as patches_for_flow_jax, ImagePreprocessor as ImagePreprocessor_jax
+    patches_for_flow as patches_for_flow_jax, ImagePreprocessor as ImagePreprocessor_jax, Conv2DDownsample as Conv2DDownsample_jax
 from perceiver_io.io_processors import extract_patches as extract_patches_torch, \
-    patches_for_flow as patches_for_flow_torch, ImagePreprocessor as ImagePreprocessor_torch
+    patches_for_flow as patches_for_flow_torch, ImagePreprocessor as ImagePreprocessor_torch, Conv2DDownsample as Conv2DDownsample_torch
 from perceiver_io.position_encoding import generate_fourier_features as generate_fourier_features_torch, \
     FourierPositionEncoding as FourierPositionEncoding_torch, \
     TrainablePositionEncoding as TrainablePositionEncoding_torch, \
@@ -52,6 +52,41 @@ class ComparePerceivers(unittest.TestCase):
         # Create some arbitrary values that can be used for tests
         self.img_size = (368, 496)
         self.batch_size = 3
+
+    def test_conv2ddownsample(self):
+        num_layers = 1
+        in_channels = 3
+        out_channels = 64
+        use_batch_norm = True
+        batch_size = 2
+
+        height = 224
+        width = 224
+
+        img_sizes = (batch_size, height, width, 3)
+        jax_images, torch_images = create_jax_torch_data(img_sizes)
+
+        # torch version expects channels as second dimension
+        torch_images = torch_images.permute(0, 3, 1, 2)
+
+
+        def conv_func_jax(jax_images):
+            conv_jax = Conv2DDownsample_jax(num_layers=num_layers, num_channels=out_channels, use_batchnorm=use_batch_norm)
+            return conv_jax(jax_images, is_training=True)
+
+        rng = jax.random.PRNGKey(42)
+        conv_func_jax = hk.transform_with_state(conv_func_jax)
+        params, state = conv_func_jax.init(rng, jax_images)
+        jax_result, _ = conv_func_jax.apply(params, state, rng, jax_images)
+
+        conv_torch = Conv2DDownsample_torch(num_layers=num_layers, in_channels=in_channels, num_channels=out_channels, use_batchnorm=use_batch_norm)
+        torch_result = conv_torch(torch_images)
+        torch_result = torch_result.permute(0, 2, 3, 1)
+
+
+        # Tests only for same shape as weights are initialized randomly
+        self.assertTrue(jax_result.shape == torch_result.shape)
+
 
     def test_patching(self):
         height = 128
