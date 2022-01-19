@@ -1,6 +1,7 @@
 .idea/
 .ipynb_checkpoints/
 perceiverEnv/
+perceiver/
 playground.py
 __pycache__
 
