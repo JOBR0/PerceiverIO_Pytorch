@@ -7,10 +7,7 @@ import matplotlib.pyplot as plt
 from flow_utils import flow_to_image
 from perceiver_io.flow_perceiver import FlowPerceiver
 
-def load_image(imfile, device):
-    img = np.array(Image.open(imfile)).astype(np.uint8)
-    img = torch.from_numpy(img).permute(2, 0, 1).float()
-    return img[None].to(device)
+
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
