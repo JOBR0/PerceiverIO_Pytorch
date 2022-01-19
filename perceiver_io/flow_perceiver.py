@@ -6,7 +6,7 @@ from typing import Sequence
 import torch.nn as nn
 import torch
 
-from perceiver_io.perceiver import PerceiverEncoder, FlowDecoder, Perceiver
+from perceiver_io.perceiver import PerceiverEncoder, Perceiver, AbstractPerceiverDecoder, BasicDecoder
 from perceiver_io import io_processors
 from timm.models.layers import to_2tuple
 
@@ -220,3 +220,64 @@ class FlowPerceiver(nn.Module):
             output = self._predict_patch(inputs)
 
         return output
+
+
+class FlowDecoder(AbstractPerceiverDecoder):
+    """Cross-attention based flow decoder.
+    Args:
+        q_in_channels (int)
+        num_z_channels: (int)
+        output_image_shape
+        output_num_channels (int): Number of channels in output. Default: 2
+        rescale_factor (float): Default: 100.0
+        """
+
+    def __init__(self,
+                 q_in_channels: int,
+                 num_z_channels: int,
+                 output_image_shape,
+                 output_num_channels: int = 2,
+                 rescale_factor: float = 100.0,
+                 **decoder_kwargs):
+        super().__init__()
+
+        self._output_image_shape = output_image_shape
+        self._output_num_channels = output_num_channels
+        self._rescale_factor = rescale_factor
+        self.decoder = BasicDecoder(
+            num_z_channels = num_z_channels,
+            q_in_channels = q_in_channels,
+            output_num_channels=output_num_channels,
+            **decoder_kwargs)
+
+    def output_shape(self, inputs):
+        # The channel dimensions of output here don't necessarily correspond to
+        # (u, v) of flow: they may contain dims needed for the post-processor.
+        return ((inputs.shape[0],) + tuple(self._output_image_shape) + (
+            self._output_num_channels,), None)
+
+    def decoder_query(self, inputs, modality_sizes=None, inputs_without_pos=None, subsampled_points=None):
+        if subsampled_points is not None:
+            raise ValueError("FlowDecoder doesn't support subsampling yet.")
+        # assumes merged in time
+        return inputs
+
+    def forward(self, query, z, *, query_mask=None):
+        # Output flow and rescale.
+        preds = self.decoder(query, z)
+        preds /= self._rescale_factor
+
+        return preds.reshape([preds.shape[0]] + list(self._output_image_shape) +
+                             [preds.shape[-1]])
+
+    def set_haiku_params(self, params):
+        # TODO where does "~" come from?
+        params = {key[key.find('/')+1:]: params[key] for key in params.keys()}
+
+        basic_decoder_params = {key[key.find('/')+1:]: params.pop(key) for key in list(params.keys()) if
+                            key.startswith("basic_decoder")}
+
+        self.decoder.set_haiku_params(basic_decoder_params)
+
+        if len(params) != 0:
+            warnings.warn(f"Some parameters couldn't be matched to model: {params.keys()}")
