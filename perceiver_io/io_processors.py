@@ -441,19 +441,27 @@ class ImagePreprocessor(nn.Module):
             pos=None,
             network_input_is_1d: bool = True) -> PreprocessorOutputT:
         if self._prep_type == 'conv':
+
+            has_temp_dim = len(inputs.shape) == 5
+
+            if has_temp_dim:
+                b, t, _, _, _ = inputs.shape
+                inputs = inputs.view(b * t, *inputs.shape[2:])
+
+
             # Convnet image featurization.
             # Downsamples spatially by a factor of 4
-            if len(inputs.shape) == 5:
-                b, t, _, _, _ = inputs.shape
-                inputs = inputs.view(b*t, *inputs.shape[2:])
-                inputs = self.convnet(inputs)
+            inputs = inputs.permute(0, 3, 1, 2)
+            inputs = self.convnet(inputs)
+            inputs = inputs.permute(0, 2, 3, 1)
+
+            if has_temp_dim:
                 inputs = inputs.view(b, t, *inputs.shape[1:])
-            else:
-                inputs = self.convnet(inputs)
 
 
 
         elif self._prep_type == 'conv1x1':
+            #TODO check channel position
             # maps inputs to 64d
             if len(inputs.shape) == 5:
                 b, t, _, _, _ = inputs.shape
