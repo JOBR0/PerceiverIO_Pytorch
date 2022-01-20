@@ -29,7 +29,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from perceiver_io.perceiver import position_encoding
-from perceiver_io.utils import conv_output_shape, init_linear_from_haiku, same_padding
+from perceiver_io.utils import conv_output_shape, init_linear_from_haiku, same_padding, init_conv_from_haiku, \
+    init_batchnorm_from_haiku
 
 ModalitySizeT = Mapping[str, int]
 PreprocessorOutputT = Tuple[torch.Tensor, Optional[torch.Tensor], torch.Tensor]
@@ -146,7 +147,7 @@ class Conv2DDownsample(nn.Module):
     def __init__(
             self,
             num_layers: int = 1,
-            in_channels: int = 64,
+            in_channels: int = 3,
             num_channels: int = 64,
             use_batchnorm: bool = True
     ):
@@ -198,6 +199,35 @@ class Conv2DDownsample(nn.Module):
             out = F.max_pool2d(out, kernel_size=3, stride=2)
 
         return out
+
+    def set_haiku_params(self, params, state):
+        params = {key[key.find('/') + 1:]: params[key] for key in params.keys()}
+        state = {key[key.find('/') + 1:]: state[key] for key in state.keys()}
+
+        for l, conv in enumerate(self.convs):
+            suffix = "" if l == 0 else f"_{l}"
+            name = "conv" + suffix
+            init_conv_from_haiku(conv, params.pop(name))
+            if self.norms is not None:
+                name = "batchnorm" + suffix
+
+                norm_state = {key[key.find('/') + 1:]: state.pop(key) for key in list(state.keys()) if
+                                             key.startswith(name)}
+
+                norm_state = {key[key.find('/') + 1:]: norm_state[key] for key in norm_state.keys()}
+
+                init_batchnorm_from_haiku(self.norms[l], params.pop(name), norm_state)
+
+        if len(params) != 0:
+            warnings.warn(f"Some parameters couldn't be matched to model: {params.keys()}")
+
+        if len(state) != 0:
+            warnings.warn(f"Some state variables couldn't be matched to model: {state.keys()}")
+
+
+
+
+
 
 #
 # class Conv2DUpsample(hk.Module):
@@ -321,8 +351,10 @@ class ImagePreprocessor(nn.Module):
         self._concat_or_add_pos = concat_or_add_pos
         self._conv_after_patching = conv_after_patching
 
+        # TODO check if channel dimesnion is last
+        input_channels = input_shape[-1]
+
         if self._prep_type == 'conv':
-            raise NotImplementedError
             # Downsampling with conv is currently restricted
             convnet_num_layers = math.log(spatial_downsample, 4)
             convnet_num_layers_is_int = (
@@ -333,13 +365,11 @@ class ImagePreprocessor(nn.Module):
                                  'downsampling with conv.')
 
             self.convnet = Conv2DDownsample(
+                in_channels=input_channels,
                 num_layers=int(convnet_num_layers),
                 num_channels=num_channels,
                 use_batchnorm=conv2d_use_batchnorm)
 
-
-            #TODO check why  is this init here?
-            variance_scaling_(self.convnet.weight, scale=init_scale, mode='fan_in', distribution='truncated_normal')
         elif self._prep_type == 'conv1x1':
             assert temporal_downsample == 1, 'conv1x1 does not downsample in time.'
             # self.convnet_1x1 = nn.Conv2d(
@@ -364,6 +394,13 @@ class ImagePreprocessor(nn.Module):
             self._conv_after_patch_layer = nn.Linear(input_shape[-1]*spatial_downsample*temporal_downsample, num_channels)
             lecun_normal_(self._conv_after_patch_layer.weight)
             nn.init.constant_(self._conv_after_patch_layer.bias, 0)
+
+
+
+        self.output_channels = num_channels
+
+        if concat_or_add_pos == 'concat':
+            self.output_channels += self._positional_encoding.output_channels
 
     def _build_network_inputs(
             self, inputs: torch.Tensor, pos: torch.Tensor,
@@ -456,8 +493,21 @@ class ImagePreprocessor(nn.Module):
         modality_sizes = None  # Size for each modality, only needed for multimodal
         return inputs, modality_sizes, inputs_without_pos
 
-    def set_haiku_params(self, params):
-        init_linear_from_haiku(self._conv_after_patch_layer, params.pop("patches_linear"))
+    def set_haiku_params(self, params, state):
+        params = {key[key.find('/') + 1:]: params[key] for key in params.keys()}
+        state = {key[key.find('/') + 1:]: state[key] for key in state.keys()}
+
+        if self._prep_type == 'conv':
+            conv2_d_downsample_params = {key[key.find('/') + 1:]: params.pop(key) for key in list(params.keys()) if
+                                    key.startswith("conv2_d_downsample")}
+            conv2_d_downsample_state = {key[key.find('/') + 1:]: state.pop(key) for key in list(state.keys()) if
+                                    key.startswith("conv2_d_downsample")}
+            self.convnet.set_haiku_params(conv2_d_downsample_params, conv2_d_downsample_state)
+
+
+
+        if self._conv_after_patching:
+            init_linear_from_haiku(self._conv_after_patch_layer, params.pop("patches_linear"))
 
         if len(params) != 0:
             warnings.warn(f"Some parameters couldn't be matched to model: {params.keys()}")

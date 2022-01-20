@@ -114,6 +114,8 @@ class TrainablePositionEncoding(AbstractPositionEncoding):
         self.pos_embs = nn.Parameter(torch.zeros((index_dim, num_channels)))
         trunc_normal_(self.pos_embs, std=init_scale)
 
+        self.output_channels = num_channels
+
     def forward(self, batch_size, pos=None):
         del pos  # Unused but required from super class
         if batch_size is not None:
@@ -161,6 +163,10 @@ class FourierPositionEncoding(AbstractPositionEncoding):
         self._index_dims = index_dims
         # Use the index dims as the maximum resolution if it's not provided.
         self._max_resolution = max_resolution or index_dims
+
+        self.output_channels = num_bands * 2 if sine_only else num_bands * 4
+        if concat_pos:
+            self.output_channels += len(index_dims)
 
     def forward(self, batch_size, pos=None):
         pos = _check_or_build_spatial_positions(pos, self._index_dims, batch_size)

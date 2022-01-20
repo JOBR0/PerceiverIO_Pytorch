@@ -235,29 +235,32 @@ class BasicDecoder(AbstractPerceiverDecoder):
                 None)
 
     def decoder_query(self, inputs, modality_sizes=None, inputs_without_pos=None, subsampled_points=None):
-        raise NotImplementedError
-        # assert self._position_encoding_type != 'none'  # Queries come from elsewhere
-        # if subsampled_points is not None:
-        #     # unravel_index returns a tuple (x_idx, y_idx, ...)
-        #     # stack to get the [n, d] tensor of coordinates
-        #     pos = torch.stack(jnp.unravel_index(subsampled_points, self._output_index_dim), axis=1)
-        #     # Map these coordinates to [-1, 1]
-        #     pos = -1 + 2 * pos / torch.tensor(self._output_index_dim)[None, :]
-        #     pos = torch.broadcast_to(pos[None],
-        #                            [inputs.shape[0], pos.shape[0], pos.shape[1]])
-        #     pos_emb = self.output_pos_enc(
-        #         batch_size=inputs.shape[0],
-        #         pos=pos)
-        #     pos_emb = torch.reshape(pos_emb, [pos_emb.shape[0], -1, pos_emb.shape[-1]])
-        # else:
-        #     pos_emb = self.output_pos_enc(batch_size=inputs.shape[0])
-        # if self._concat_preprocessed_input:
-        #     if inputs_without_pos is None:
-        #         raise ValueError('Value is required for inputs_without_pos if'
-        #                          ' concat_preprocessed_input is True')
-        #     pos_emb = torch.concatenate([inputs_without_pos, pos_emb], axis=-1)
-        #
-        # return pos_emb
+        assert self._position_encoding_type != 'none'  # Queries come from elsewhere
+
+        N = inputs.shape[0]
+
+        if subsampled_points is not None:
+            raise NotImplementedError("Subsampled points not implemented")
+            # # unravel_index returns a tuple (x_idx, y_idx, ...)
+            # # stack to get the [n, d] tensor of coordinates
+            # pos = torch.stack(jnp.unravel_index(subsampled_points, self._output_index_dim), axis=1)
+            # # Map these coordinates to [-1, 1]
+            # pos = -1 + 2 * pos / torch.tensor(self._output_index_dim)[None, :]
+            # pos = torch.broadcast_to(pos[None],
+            #                        [N, pos.shape[0], pos.shape[1]])
+            # pos_emb = self.output_pos_enc(
+            #     batch_size=inputs.shape[0],
+            #     pos=pos)
+            # pos_emb = torch.reshape(pos_emb, [N, -1, pos_emb.shape[-1]])
+        else:
+            pos_emb = self.output_pos_enc(batch_size=N)
+        if self._concat_preprocessed_input:
+            if inputs_without_pos is None:
+                raise ValueError('Value is required for inputs_without_pos if'
+                                 ' concat_preprocessed_input is True')
+            pos_emb = torch.concatenate([inputs_without_pos, pos_emb], axis=-1)
+
+        return pos_emb
 
     def forward(self, query, z, *, query_mask=None):
         # Cross-attention decoding.
@@ -282,6 +285,12 @@ class BasicDecoder(AbstractPerceiverDecoder):
         self.decoding_cross_attn.set_haiku_params(cross_attention_params)
 
         init_linear_from_haiku(self.final_layer, params.pop("output"))
+
+
+        if self._position_encoding_type == 'trainable':
+            params = {key[key.find('/') + 1:]: params[key] for key in params.keys()}
+
+            self.output_pos_enc.set_haiku_params(params.pop("trainable_position_encoding"))
 
         if len(params) != 0:
             warnings.warn(f"Some parameters couldn't be matched to model: {params.keys()}")

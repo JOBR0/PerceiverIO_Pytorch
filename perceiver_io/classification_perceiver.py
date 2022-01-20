@@ -18,10 +18,13 @@ from perceiver_io.perceiver import AbstractPerceiverDecoder, BasicDecoder
 
 class ClassificationPerceiver(nn.Module):
 
-    def __init__(self, num_classes: int = 1000):
+    def __init__(self, num_classes: int = 1000, img_size: Sequence[int] = (224, 224)):
+        super().__init__()
+        channels = 3
+
         input_preprocessor = io_processors.ImagePreprocessor(
             # TODO check input_shape
-            input_shape=(),#list(img_size) + [channels * patch_size ** 2],
+            input_shape=list(img_size) + [channels],
             position_encoding_type='fourier',
             fourier_position_encoding_kwargs=dict(
                 concat_pos=True,
@@ -32,6 +35,7 @@ class ClassificationPerceiver(nn.Module):
             prep_type='conv')
 
         encoder = PerceiverEncoder(
+            num_input_channels=input_preprocessor.output_channels,
             cross_attend_widening_factor=1,
             cross_attention_shape_for_attn='kv',
             dropout_prob=0,
@@ -46,6 +50,7 @@ class ClassificationPerceiver(nn.Module):
             z_pos_enc_init_scale=0.02)
 
         decoder = ClassificationDecoder(
+            q_in_channels=1024, # corresponds to num_channels of position encoding
             num_classes=num_classes,
             num_z_channels=1024,
             position_encoding_type='trainable',
@@ -63,10 +68,31 @@ class ClassificationPerceiver(nn.Module):
             output_postprocessor=None)
 
     def load_haiku_params(self, file):
-        raise NotImplementedError
+        with open(file, "rb") as f:
+            dict = pickle.loads(f.read())
+            params = dict["params"]
+            #TODO handle state
+            state = dict["state"]
+            # convert to dict
+            state = {key: state[key] for key in state}
+            encoder_params = {key[key.find('/') + 1:]: params.pop(key) for key in list(params.keys()) if
+                              key.startswith("perceiver_encoder")}
+            self.perceiver._encoder.set_haiku_params(encoder_params)
+            decoder_params = {key[key.find('/') + 1:]: params.pop(key) for key in list(params.keys()) if
+                              key.startswith("classification_decoder")}
+            self.perceiver._decoder.set_haiku_params(decoder_params)
+
+            preprocessor_params = {key[key.find('/') + 1:]: params.pop(key) for key in list(params.keys()) if
+                                   key.startswith("image_preprocessor")}
+            preprocessor_state = {key[key.find('/') + 1:]: state.pop(key) for key in list(state.keys()) if
+                                  key.startswith("image_preprocessor")}
+            self.perceiver._input_preprocessor.set_haiku_params(preprocessor_params, preprocessor_state)
+
+            if len(params) != 0:
+                warnings.warn(f"Some parameters couldn't be matched to model: {params.keys()}")
 
     def forward(self, img: torch.Tensor):
-        pass
+        return self.perceiver(img)
 
 
 class ClassificationDecoder(AbstractPerceiverDecoder):
@@ -98,3 +124,15 @@ class ClassificationDecoder(AbstractPerceiverDecoder):
         # B x 1 x num_classes -> B x num_classes
         logits = self.decoder(query, z)
         return logits[:, 0, :]
+
+    def set_haiku_params(self, params):
+        # TODO where does "~" come from?
+        params = {key[key.find('/')+1:]: params[key] for key in params.keys()}
+
+        basic_decoder_params = {key[key.find('/')+1:]: params.pop(key) for key in list(params.keys()) if
+                            key.startswith("basic_decoder")}
+
+        self.decoder.set_haiku_params(basic_decoder_params)
+
+        if len(params) != 0:
+            warnings.warn(f"Some parameters couldn't be matched to model: {params.keys()}")
