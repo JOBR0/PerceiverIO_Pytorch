@@ -15,7 +15,7 @@ def same_padding(input_size: Sequence[int], kernel_size: Union[int, Sequence[int
                       stride: Union[int, Sequence[int]] = 1, dims: int = 2):
     """
     Calculates the padding for a convolution with same padding and stride
-    If the padding isn't divisible by two, right and bottom will be 1 pixel larger
+    If the padding isn"t divisible by two, right and bottom will be 1 pixel larger
     Args:
         kernel_size (int): Size of kernel
         stride (int): stride of convolution
@@ -82,11 +82,34 @@ def conv_output_shape(input_size: Sequence[int],
 
 def init_linear_from_haiku(linear_layer: torch.nn.Linear, haiku_params):
     with torch.no_grad():
-        linear_layer.weight.copy_(torch.from_numpy(haiku_params['w'].T).float())
-        linear_layer.bias.copy_(torch.from_numpy(haiku_params['b'].T).float())
+        linear_layer.weight.copy_(torch.from_numpy(haiku_params["w"].T).float())
+        if "b" in haiku_params:
+            linear_layer.bias.copy_(torch.from_numpy(haiku_params["b"].T).float())
+        else:
+            assert linear_layer.bias is None, "Bias is missing from Haiku model"
 
 
 def init_layer_norm_from_haiku(layer_norm: torch.nn.LayerNorm, haiku_params):
     with torch.no_grad():
-        layer_norm.weight.copy_(torch.from_numpy(haiku_params['scale']).float())
-        layer_norm.bias.copy_(torch.from_numpy(haiku_params['offset']).float())
+        layer_norm.weight.copy_(torch.from_numpy(haiku_params["scale"]).float())
+        layer_norm.bias.copy_(torch.from_numpy(haiku_params["offset"]).float())
+
+def init_conv_from_haiku(conv_layer: torch.nn.Conv2d, haiku_params):
+    # TODO check if transpose is needed
+    with torch.no_grad():
+        conv_layer.weight.copy_(torch.from_numpy(haiku_params["w"].T).float())
+        if "b" in haiku_params:
+            conv_layer.bias.copy_(torch.from_numpy(haiku_params["b"].T).float())
+        else:
+            assert conv_layer.bias is None, "Bias is missing from Haiku model"
+
+def init_batchnorm_from_haiku(batch_norm: torch.nn.BatchNorm2d, haiku_params, haiku_state):
+    with torch.no_grad():
+        batch_norm.weight.copy_(torch.from_numpy(haiku_params["scale"]).squeeze().float())
+        batch_norm.bias.copy_(torch.from_numpy(haiku_params["offset"]).squeeze().float())
+        
+        batch_norm.running_mean.copy_(torch.from_numpy(haiku_state["mean_ema"]["average"]).squeeze().float())
+        batch_norm.running_var.copy_(torch.from_numpy(haiku_state["var_ema"]["average"]).squeeze().float())
+        batch_norm.num_batches_tracked.copy_(torch.from_numpy(haiku_state["mean_ema"]["counter"]))
+        pass
+
