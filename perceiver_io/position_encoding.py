@@ -104,6 +104,10 @@ class AbstractPositionEncoding(nn.Module, metaclass=abc.ABCMeta):
     def forward(self, batch_size, pos):
         raise NotImplementedError
 
+    @abc.abstractmethod
+    def n_output_channels(self):
+        raise NotImplementedError
+
 
 class TrainablePositionEncoding(AbstractPositionEncoding):
     """Trainable position encoding."""
@@ -114,13 +118,16 @@ class TrainablePositionEncoding(AbstractPositionEncoding):
         self.pos_embs = nn.Parameter(torch.zeros((index_dim, num_channels)))
         trunc_normal_(self.pos_embs, std=init_scale)
 
-        self.output_channels = num_channels
+        self._output_channels = num_channels
 
     def forward(self, batch_size, pos=None):
         del pos  # Unused but required from super class
         if batch_size is not None:
             pos_embs = torch.broadcast_to(self.pos_embs[None, :, :], (batch_size,) + self.pos_embs.shape)
         return pos_embs
+
+    def n_output_channels(self):
+        return self._output_channels
 
     def set_haiku_params(self, params):
         with torch.no_grad():
@@ -164,9 +171,9 @@ class FourierPositionEncoding(AbstractPositionEncoding):
         # Use the index dims as the maximum resolution if it's not provided.
         self._max_resolution = max_resolution or index_dims
 
-        self.output_channels = num_bands * 2 if sine_only else num_bands * 4
+        self._output_channels = num_bands * 2 if sine_only else num_bands * 4
         if concat_pos:
-            self.output_channels += len(index_dims)
+            self._output_channels += len(index_dims)
 
     def forward(self, batch_size, pos=None):
         pos = _check_or_build_spatial_positions(pos, self._index_dims, batch_size)
@@ -179,6 +186,9 @@ class FourierPositionEncoding(AbstractPositionEncoding):
         if batch_size is not None:
             pos = torch.broadcast_to(pos[None, :, :], (batch_size,) + pos.shape)
         return pos
+
+    def n_output_channels(self):
+        return self._output_channels
 
 
 class PositionEncodingProjector(AbstractPositionEncoding):

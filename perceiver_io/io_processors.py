@@ -400,7 +400,10 @@ class ImagePreprocessor(nn.Module):
         self.output_channels = num_channels
 
         if concat_or_add_pos == 'concat':
-            self.output_channels += self._positional_encoding.output_channels
+            self.output_channels += self._positional_encoding.n_output_channels()
+
+    def n_output_channels(self):
+        return self.output_channels
 
     def _build_network_inputs(
             self, inputs: torch.Tensor, pos: torch.Tensor,
