@@ -57,9 +57,7 @@ class FlowPerceiver(nn.Module):
             temporal_downsample=2,
             num_channels=preprocessor_channels)
 
-        # TODO generalize
-        fourier_dimensions = 258
-        encoder_input_channels = preprocessor_channels + fourier_dimensions
+        encoder_input_channels = input_preprocessor.n_output_channels()
         num_z_channels = 512
 
         encoder = PerceiverEncoder(
@@ -87,13 +85,7 @@ class FlowPerceiver(nn.Module):
             output_w_init="zeros",
             # We query the decoder using the first frame features
             # rather than a standard decoder position encoding.
-            position_encoding_type='fourier',
-            fourier_position_encoding_kwargs=dict(
-                concat_pos=True,
-                max_resolution=img_size,
-                num_bands=64,
-                sine_only=False
-            )
+            position_encoding_type='none'
         )
 
         self.perceiver = Perceiver(
@@ -105,6 +97,7 @@ class FlowPerceiver(nn.Module):
         self.H, self.W = to_2tuple(img_size)
 
     def load_haiku_params(self, file):
+        """Loads the original haiku checkpoint. Requires haiku to be installed."""
         with open(file, "rb") as f:
             params = pickle.loads(f.read())
             encoder_params = {key[key.find('/') + 1:]: params.pop(key) for key in list(params.keys()) if
@@ -165,8 +158,6 @@ class FlowPerceiver(nn.Module):
             test_mode (bool): If in test mode. Default: False
             min_overlap (int): Minimum overlap of patches if images are bigger than training size. Default: 20
         """
-        image1 = 2 * (image1 / 255.0) - 1.0
-        image2 = 2 * (image2 / 255.0) - 1.0
 
         height = image1.shape[2]
         width = image1.shape[3]
@@ -205,6 +196,7 @@ class FlowPerceiver(nn.Module):
                 weights_x = torch.minimum(weights_x + 1, self.W - weights_x)
                 weights_y = torch.minimum(weights_y + 1, self.H - weights_y)
                 weights = torch.minimum(weights_x, weights_y)[None, None, :, :]
+                weights = weights / weights.max()
                 weights = weights.to(flow_piece.device)
 
                 padding = (x, width - x - self.W, y, height - y - self.H)
@@ -226,7 +218,7 @@ class FlowDecoder(AbstractPerceiverDecoder):
     """Cross-attention based flow decoder.
     Args:
         q_in_channels (int)
-        num_z_channels: (int)
+        num_z_channels: (int): Number of channels in the latent representation.
         output_image_shape
         output_num_channels (int): Number of channels in output. Default: 2
         rescale_factor (float): Default: 100.0
@@ -245,8 +237,8 @@ class FlowDecoder(AbstractPerceiverDecoder):
         self._output_num_channels = output_num_channels
         self._rescale_factor = rescale_factor
         self.decoder = BasicDecoder(
-            num_z_channels = num_z_channels,
-            q_in_channels = q_in_channels,
+            num_z_channels=num_z_channels,
+            q_in_channels=q_in_channels,
             output_num_channels=output_num_channels,
             **decoder_kwargs)
 
@@ -271,13 +263,12 @@ class FlowDecoder(AbstractPerceiverDecoder):
                              [preds.shape[-1]])
 
     def set_haiku_params(self, params):
-        # TODO where does "~" come from?
-        params = {key[key.find('/')+1:]: params[key] for key in params.keys()}
+        params = {key[key.find('/') + 1:]: params[key] for key in params.keys()}
 
-        basic_decoder_params = {key[key.find('/')+1:]: params.pop(key) for key in list(params.keys()) if
-                            key.startswith("basic_decoder")}
+        basic_decoder_params = {key[key.find('/') + 1:]: params.pop(key) for key in list(params.keys()) if
+                                key.startswith("basic_decoder")}
 
         self.decoder.set_haiku_params(basic_decoder_params)
 
         if len(params) != 0:
-            warnings.warn(f"Some parameters couldn't be matched to model: {params.keys()}")
+            warnings.warn(f"Some parameters couldn't be matched to the model: {params.keys()}")
