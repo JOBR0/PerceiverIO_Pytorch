@@ -127,7 +127,6 @@ class PerceiverEncoder(nn.Module):
         return z
 
     def set_haiku_params(self, params):
-        # TODO where does "~" come from?
         params = {key[key.find('/') + 1:]: params[key] for key in params.keys()}
 
         cross_attention_params = {key[key.find('/') + 1:]: params.pop(key) for key in list(params.keys()) if
@@ -284,7 +283,8 @@ class BasicDecoder(AbstractPerceiverDecoder):
 
         self.decoding_cross_attn.set_haiku_params(cross_attention_params)
 
-        init_linear_from_haiku(self.final_layer, params.pop("output"))
+        if self._final_project:
+            init_linear_from_haiku(self.final_layer, params.pop("output"))
 
 
         if self._position_encoding_type == 'trainable':

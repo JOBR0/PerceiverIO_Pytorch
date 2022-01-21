@@ -111,5 +111,8 @@ def init_batchnorm_from_haiku(batch_norm: torch.nn.BatchNorm2d, haiku_params, ha
         batch_norm.running_mean.copy_(torch.from_numpy(haiku_state["mean_ema"]["average"]).squeeze().float())
         batch_norm.running_var.copy_(torch.from_numpy(haiku_state["var_ema"]["average"]).squeeze().float())
         batch_norm.num_batches_tracked.copy_(torch.from_numpy(haiku_state["mean_ema"]["counter"]))
-        pass
+
+def init_embedding_from_haiku(embedding_layer: torch.nn.Embedding, haiku_params):
+    with torch.no_grad():
+        embedding_layer.weight.copy_(torch.from_numpy(haiku_params["embeddings"]).float())
 
