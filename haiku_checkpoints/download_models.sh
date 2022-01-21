@@ -9,3 +9,6 @@ wget https://storage.googleapis.com/perceiver_io/imagenet_learned_position_encod
 
 #Masked Language Modelling
 wget https://storage.googleapis.com/perceiver_io/language_perceiver_io_bytes.pickle
+
+#Video Autoencoding
+wget https://storage.googleapis.com/perceiver_io/video_autoencoding_checkpoint.pystate
