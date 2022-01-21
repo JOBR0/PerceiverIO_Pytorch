@@ -5,7 +5,7 @@ import numpy as np
 import pickle
 
 from perceiver_io.language_perceiver import LanguagePerceiver
-from perceiver_io.bytes_tokenizer import BytesTokenizer
+from utils.bytes_tokenizer import BytesTokenizer
 
 tokenizer = BytesTokenizer()
 

@@ -4,7 +4,7 @@ from PIL import Image
 import numpy as np
 import matplotlib.pyplot as plt
 
-from flow_utils import flow_to_image
+from utils.flow_utils import flow_to_image
 from perceiver_io.flow_perceiver import FlowPerceiver
 
 
@@ -13,7 +13,7 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 perceiver = FlowPerceiver()
 
-perceiver.load_haiku_params("./haiku_models/optical_flow_checkpoint.pystate")
+perceiver.load_haiku_params("./haiku_checkpoints/optical_flow_checkpoint.pystate")
 
 img1 = load_image("./sample_data/frame_0016.png", device)
 img2 = load_image("./sample_data/frame_0017.png", device)
