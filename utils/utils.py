@@ -5,6 +5,7 @@ import torch
 from PIL import Image
 import numpy as np
 
+
 def load_image(imfile, device):
     img = np.array(Image.open(imfile)).astype(np.uint8)
     img = torch.from_numpy(img).permute(2, 0, 1).float()
@@ -12,7 +13,7 @@ def load_image(imfile, device):
 
 
 def same_padding(input_size: Sequence[int], kernel_size: Union[int, Sequence[int]],
-                      stride: Union[int, Sequence[int]] = 1, dims: int = 2):
+                 stride: Union[int, Sequence[int]] = 1, dims: int = 2):
     """
     Calculates the padding for a convolution with same padding and stride
     If the padding isn"t divisible by two, right and bottom will be 1 pixel larger
@@ -30,17 +31,18 @@ def same_padding(input_size: Sequence[int], kernel_size: Union[int, Sequence[int
     skip_dims = len(input_size) - dims
 
     padding = []
-    for d in range(dims-1, -1, -1):
-        if input_size[d+skip_dims] % stride[d] == 0:
+    for d in range(dims - 1, -1, -1):
+        if input_size[d + skip_dims] % stride[d] == 0:
             total_padding = kernel_size[d] - stride[d]
         else:
-            total_padding = kernel_size[d] - (input_size[d+skip_dims] % stride[d])
+            total_padding = kernel_size[d] - (input_size[d + skip_dims] % stride[d])
 
         left_padding = math.floor(total_padding / 2)
         right_padding = math.ceil(total_padding / 2)
         padding.append(left_padding)
         padding.append(right_padding)
     return padding
+
 
 def conv_output_shape(input_size: Sequence[int],
                       kernel_size: Union[int, Sequence[int]],
@@ -80,6 +82,7 @@ def conv_output_shape(input_size: Sequence[int],
 
     return output_size
 
+
 def init_linear_from_haiku(linear_layer: torch.nn.Linear, haiku_params):
     with torch.no_grad():
         linear_layer.weight.copy_(torch.from_numpy(haiku_params["w"].T).float())
@@ -94,6 +97,7 @@ def init_layer_norm_from_haiku(layer_norm: torch.nn.LayerNorm, haiku_params):
         layer_norm.weight.copy_(torch.from_numpy(haiku_params["scale"]).float())
         layer_norm.bias.copy_(torch.from_numpy(haiku_params["offset"]).float())
 
+
 def init_conv_from_haiku(conv_layer: torch.nn.Conv2d, haiku_params):
     # TODO check if transpose is needed
     with torch.no_grad():
@@ -103,16 +107,17 @@ def init_conv_from_haiku(conv_layer: torch.nn.Conv2d, haiku_params):
         else:
             assert conv_layer.bias is None, "Bias is missing from Haiku model"
 
+
 def init_batchnorm_from_haiku(batch_norm: torch.nn.BatchNorm2d, haiku_params, haiku_state):
     with torch.no_grad():
         batch_norm.weight.copy_(torch.from_numpy(haiku_params["scale"]).squeeze().float())
         batch_norm.bias.copy_(torch.from_numpy(haiku_params["offset"]).squeeze().float())
-        
+
         batch_norm.running_mean.copy_(torch.from_numpy(haiku_state["mean_ema"]["average"]).squeeze().float())
         batch_norm.running_var.copy_(torch.from_numpy(haiku_state["var_ema"]["average"]).squeeze().float())
         batch_norm.num_batches_tracked.copy_(torch.from_numpy(haiku_state["mean_ema"]["counter"]))
 
+
 def init_embedding_from_haiku(embedding_layer: torch.nn.Embedding, haiku_params):
     with torch.no_grad():
         embedding_layer.weight.copy_(torch.from_numpy(haiku_params["embeddings"]).float())
-
