@@ -118,7 +118,7 @@ class PerceiverEncoder(nn.Module):
         attention_mask = None
         if input_mask is not None:
             attention_mask = make_cross_attention_mask(
-                query_mask=torch.ones(z.shape[:2], dtype=torch.int32),
+                query_mask=torch.ones(z.shape[:2], dtype=torch.bool),
                 kv_mask=input_mask)
         z = self.cross_attend(z, inputs, attention_mask=attention_mask)
         for _ in range(self._num_blocks):
@@ -270,7 +270,7 @@ class BasicDecoder(AbstractPerceiverDecoder):
         if query_mask is not None:
             attention_mask = make_cross_attention_mask(
                 query_mask=query_mask,
-                kv_mask=torch.ones(z.shape[:2], dtype=torch.int32))
+                kv_mask=torch.ones(z.shape[:2], dtype=torch.bool))
 
         output = self.decoding_cross_attn(query, z, attention_mask=attention_mask)
         if self._final_project:

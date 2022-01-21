@@ -38,23 +38,23 @@ PreprocessorT = Callable[..., PreprocessorOutputT]
 PostprocessorT = Callable[..., Any]
 
 
-# def reverse_space_to_depth(
-#         frames: jnp.ndarray,
-#         temporal_block_size: int = 1,
-#         spatial_block_size: int = 1) -> jnp.ndarray:
-#     """Reverse space to depth transform."""
-#     if len(frames.shape) == 4:
-#         return einops.rearrange(
-#             frames, 'b h w (dh dw c) -> b (h dh) (w dw) c',
-#             dh=spatial_block_size, dw=spatial_block_size)
-#     elif len(frames.shape) == 5:
-#         return einops.rearrange(
-#             frames, 'b t h w (dt dh dw c) -> b (t dt) (h dh) (w dw) c',
-#             dt=temporal_block_size, dh=spatial_block_size, dw=spatial_block_size)
-#     else:
-#         raise ValueError(
-#             'Frames should be of rank 4 (batch, height, width, channels)'
-#             ' or rank 5 (batch, time, height, width, channels)')
+def reverse_space_to_depth(
+        frames: torch.Tensor,
+        temporal_block_size: int = 1,
+        spatial_block_size: int = 1) -> torch.Tensor:
+    """Reverse space to depth transform."""
+    if len(frames.shape) == 4:
+        return einops.rearrange(
+            frames, 'b h w (dh dw c) -> b (h dh) (w dw) c',
+            dh=spatial_block_size, dw=spatial_block_size)
+    elif len(frames.shape) == 5:
+        return einops.rearrange(
+            frames, 'b t h w (dt dh dw c) -> b (t dt) (h dh) (w dw) c',
+            dt=temporal_block_size, dh=spatial_block_size, dw=spatial_block_size)
+    else:
+        raise ValueError(
+            'Frames should be of rank 4 (batch, height, width, channels)'
+            ' or rank 5 (batch, time, height, width, channels)')
 
 
 def space_to_depth(
@@ -226,50 +226,62 @@ class Conv2DDownsample(nn.Module):
 
 
 
+class Conv2DUpsample(nn.Module):
+    """Upsamples 4x using 2 2D transposed convolutions."""
 
+    def __init__(
+            self,
+            n_outputs: int,
+            in_channels: int = 64,
+    ):
+        """Constructs a Conv2DUpsample model.
+    Args:
+      n_outputs: The number of output channels of the module.
+      name: Name of the module.
+    """
+        super().__init__()
 
+        self.transp_conv1 = nn.ConvTranspose2d(in_channels=in_channels,
+                                               out_channels=n_outputs * 2,
+                                               kernel_size=4,
+                                               stride=2,
+                                               padding=0,
+                                               output_padding=0,
+                                                bias=True)
 
-#
-# class Conv2DUpsample(hk.Module):
-#     """Upsamples 4x using 2 2D transposed convolutions."""
-#
-#     def __init__(
-#             self,
-#             n_outputs: int,
-#             name: Optional[str] = None,
-#     ):
-#         """Constructs a Conv2DUpsample model.
-#     Args:
-#       n_outputs: The number of output channels of the module.
-#       name: Name of the module.
-#     """
-#         super().__init__(name=name)
-#
-#         self.transp_conv1 = hk.Conv2DTranspose(
-#             output_channels=n_outputs * 2,
-#             kernel_shape=4,
-#             stride=2,
-#             with_bias=True,
-#             padding='SAME',
-#             name='transp_conv_1')
-#
-#         self.transp_conv2 = hk.Conv2DTranspose(
-#             output_channels=n_outputs,
-#             kernel_shape=4,
-#             stride=2,
-#             with_bias=True,
-#             padding='SAME',
-#             name='transp_conv_2')
-#
-#     def __call__(self, inputs: jnp.ndarray, *,
-#                  is_training: bool,
-#                  test_local_stats: bool = False) -> jnp.ndarray:
-#         out = inputs
-#         out = self.transp_conv1(out)
-#         out = jax.nn.relu(out)
-#         out = self.transp_conv2(out)
-#
-#         return out
+        self.transp_conv1 = hk.Conv2DTranspose(
+            output_channels=n_outputs * 2,
+            kernel_shape=4,
+            stride=2,
+            with_bias=True,
+            padding='SAME',
+            name='transp_conv_1')
+
+        self.transp_conv2 = nn.ConvTranspose2d(in_channels=n_outputs,
+                                               out_channels=n_outputs,
+                                               kernel_size=4,
+                                               stride=2,
+                                               padding=0,
+                                               output_padding=0,
+                                               bias=True)
+
+        self.transp_conv2 = hk.Conv2DTranspose(
+            output_channels=n_outputs,
+            kernel_shape=4,
+            stride=2,
+            with_bias=True,
+            padding='SAME',
+            name='transp_conv_2')
+
+    def __call__(self, inputs: torch.Tensor, *,
+                 is_training: bool,
+                 test_local_stats: bool = False) -> torch.Tensor:
+        out = inputs
+        out = self.transp_conv1(out)
+        out = F.relu(out)
+        out = self.transp_conv2(out)
+
+        return out
 #
 #
 # class Conv3DUpsample(hk.Module):
@@ -351,7 +363,6 @@ class ImagePreprocessor(nn.Module):
         self._concat_or_add_pos = concat_or_add_pos
         self._conv_after_patching = conv_after_patching
 
-        # TODO check if channel dimesnion is last
         input_channels = input_shape[-1]
 
         if self._prep_type == 'conv':
@@ -524,95 +535,95 @@ class ImagePreprocessor(nn.Module):
             warnings.warn(f"Some parameters couldn't be matched to model: {params.keys()}")
 
 
-# class ImagePostprocessor(hk.Module):
-#   """Image postprocessing for Perceiver."""
-#
-#   def __init__(
-#       self,
-#       postproc_type: str = 'pixels',
-#       spatial_upsample: int = 1,
-#       temporal_upsample: int = 1,
-#       n_outputs: int = -1,  # only relevant for 'conv1x1', 'conv', and 'raft'
-#       input_reshape_size: Optional[Sequence[int]] = None,
-#       name: Optional[str] = None):
-#     super().__init__(name=name)
-#
-#     if postproc_type not in ('conv', 'patches', 'pixels', 'raft', 'conv1x1'):
-#       raise ValueError('Invalid postproc_type!')
-#
-#     # Architecture parameters:
-#     self._postproc_type = postproc_type
-#
-#     self._temporal_upsample = temporal_upsample
-#     self._spatial_upsample = spatial_upsample
-#     self._input_reshape_size = input_reshape_size
-#
-#     if self._postproc_type == 'pixels':
-#       # No postprocessing.
-#       if self._temporal_upsample != 1 or self._spatial_upsample != 1:
-#         raise ValueError('Pixels postprocessing should not currently upsample.')
-#     elif self._postproc_type == 'conv1x1':
-#       assert self._temporal_upsample == 1, 'conv1x1 does not upsample in time.'
-#       if n_outputs == -1:
-#         raise ValueError('Expected value for n_outputs')
-#       self.conv1x1 = hk.Conv2D(
-#           n_outputs, kernel_shape=[1, 1],
-#           # spatial_downsample is unconstrained for 1x1 convolutions.
-#           stride=[self._spatial_upsample, self._spatial_upsample])
-#     elif self._postproc_type == 'conv':
-#       if n_outputs == -1:
-#         raise ValueError('Expected value for n_outputs')
-#       if self._temporal_upsample != 1:
-#         def int_log2(x):
-#           return int(np.round(np.log(x) / np.log(2)))
-#         self.convnet = Conv3DUpsample(
-#             n_outputs, int_log2(temporal_upsample), int_log2(spatial_upsample))
-#       else:
-#         self.convnet = Conv2DUpsample(n_outputs)
-#
-#   def __call__(
-#       self, inputs: jnp.ndarray, *,
-#       is_training: bool,
-#       pos: Optional[jnp.ndarray] = None,
-#       modality_sizes: Optional[ModalitySizeT] = None) -> jnp.ndarray:
-#     if self._input_reshape_size is not None:
-#       inputs = jnp.reshape(
-#           inputs,
-#           [inputs.shape[0]] + list(self._input_reshape_size)
-#           + [inputs.shape[-1]])
-#
-#     if self._postproc_type == 'conv' or self._postproc_type == 'raft':
-#       # Convnet image featurization.
-#       conv = self.convnet
-#       if len(inputs.shape) == 5 and self._temporal_upsample == 1:
-#         conv = hk.BatchApply(conv)
-#       inputs = conv(inputs, is_training=is_training)
-#     elif self._postproc_type == 'conv1x1':
-#       inputs = self.conv1x1(inputs)
-#     elif self._postproc_type == 'patches':
-#       inputs = reverse_space_to_depth(
-#           inputs, self._temporal_upsample, self._spatial_upsample)
-#
-#     return inputs
-#
-#
-# class OneHotPreprocessor(hk.Module):
-#   """One-hot preprocessor for Perceiver Encoder."""
-#
-#   def __init__(self, name: Optional[str] = None):
-#     super().__init__(name=name)
-#
-#   def __call__(self, inputs: jnp.ndarray, *,
-#                is_training: bool,
-#                pos: Optional[jnp.ndarray] = None,
-#                network_input_is_1d: bool = True) -> PreprocessorOutputT:
-#     # Add a dummy index dimension.
-#     inputs = inputs[:, None, :]
-#
-#     # No position encodings, so the 1st (input) and 3rd (inputs_without_pos)
-#     # outputs are identical.
-#     return inputs, None, inputs
-#
+class ImagePostprocessor(nn.Module):
+  """Image postprocessing for Perceiver."""
+
+  def __init__(
+      self,
+      postproc_type: str = 'pixels',
+      spatial_upsample: int = 1,
+      temporal_upsample: int = 1,
+      n_outputs: int = -1,  # only relevant for 'conv1x1', 'conv', and 'raft'
+      input_reshape_size: Optional[Sequence[int]] = None):
+    super().__init__()
+
+    if postproc_type not in ('conv', 'patches', 'pixels', 'raft', 'conv1x1'):
+      raise ValueError('Invalid postproc_type!')
+
+    # Architecture parameters:
+    self._postproc_type = postproc_type
+
+    self._temporal_upsample = temporal_upsample
+    self._spatial_upsample = spatial_upsample
+    self._input_reshape_size = input_reshape_size
+
+    if self._postproc_type == 'pixels':
+      # No postprocessing.
+      if self._temporal_upsample != 1 or self._spatial_upsample != 1:
+        raise ValueError('Pixels postprocessing should not currently upsample.')
+    elif self._postproc_type == 'conv1x1':
+      assert self._temporal_upsample == 1, 'conv1x1 does not upsample in time.'
+      if n_outputs == -1:
+        raise ValueError('Expected value for n_outputs')
+      self.conv1x1 = hk.Conv2D(
+          n_outputs, kernel_shape=[1, 1],
+          # spatial_downsample is unconstrained for 1x1 convolutions.
+          stride=[self._spatial_upsample, self._spatial_upsample])
+    elif self._postproc_type == 'conv':
+      if n_outputs == -1:
+        raise ValueError('Expected value for n_outputs')
+      if self._temporal_upsample != 1:
+        def int_log2(x):
+          return int(np.round(np.log(x) / np.log(2)))
+        self.convnet = Conv3DUpsample(
+            n_outputs, int_log2(temporal_upsample), int_log2(spatial_upsample))
+      else:
+        self.convnet = Conv2DUpsample(n_outputs)
+
+  def forward(
+      self, inputs: torch.Tensor, *,
+      is_training: bool,
+      pos: Optional[torch.Tensor] = None,
+      modality_sizes: Optional[ModalitySizeT] = None) -> torch.Tensor:
+    if self._input_reshape_size is not None:
+      inputs = torch.reshape(
+          inputs,
+          [inputs.shape[0]] + list(self._input_reshape_size)
+          + [inputs.shape[-1]])
+
+    if self._postproc_type == 'conv' or self._postproc_type == 'raft':
+      # Convnet image featurization.
+      conv = self.convnet
+      if len(inputs.shape) == 5 and self._temporal_upsample == 1:
+        conv = hk.BatchApply(conv)
+      inputs = conv(inputs, is_training=is_training)
+    elif self._postproc_type == 'conv1x1':
+      inputs = self.conv1x1(inputs)
+    elif self._postproc_type == 'patches':
+      inputs = reverse_space_to_depth(
+          inputs, self._temporal_upsample, self._spatial_upsample)
+
+    return inputs
+
+
+class OneHotPreprocessor(nn.Module):
+  """One-hot preprocessor for Perceiver Encoder."""
+
+  def __init__(self):
+    super().__init__()
+
+  def __call__(self, inputs: torch.Tensor, *,
+               pos: Optional[torch.Tensor] = None,
+               network_input_is_1d: bool = True) -> PreprocessorOutputT:
+    # Add a dummy index dimension.
+    inputs = inputs[:, None, :]
+
+    #TODO whats the point of this?
+
+    # No position encodings, so the 1st (input) and 3rd (inputs_without_pos)
+    # outputs are identical.
+    return inputs, None, inputs
+
 #
 # class AudioPreprocessor(hk.Module):
 #   """Audio preprocessing for Perceiver Encoder."""
@@ -852,23 +863,23 @@ class ImagePreprocessor(nn.Module):
 #     return outputs
 #
 #
-# class ClassificationPostprocessor(hk.Module):
-#   """Classification postprocessing for Perceiver."""
-#
-#   def __init__(
-#       self,
-#       num_classes: int,
-#       name: Optional[str] = None):
-#     super().__init__(name=name)
-#     self._num_classes = num_classes
-#
-#   def __call__(self, inputs: jnp.ndarray, *,
-#                is_training: bool,
-#                pos: Optional[jnp.ndarray] = None,
-#                modality_sizes: Optional[ModalitySizeT] = None) -> jnp.ndarray:
-#     logits = hk.Linear(self._num_classes)(inputs)
-#     return logits[:, 0, :]
-#
+
+class ClassificationPostprocessor(nn.Module):
+  """Classification postprocessing for Perceiver."""
+
+  def __init__(
+      self,
+      num_classes: int):
+    super().__init__()
+    self._num_classes = num_classes
+
+  def forward(self, inputs: torch.Tensor, *,
+               is_training: bool,
+               pos: Optional[torch.Tensor] = None,
+               modality_sizes: Optional[ModalitySizeT] = None) -> torch.Tensor:
+    logits = hk.Linear(self._num_classes)(inputs)
+    return logits[:, 0, :]
+
 #
 # class ProjectionPostprocessor(hk.Module):
 #   """Projection postprocessing for Perceiver."""
@@ -888,24 +899,29 @@ class ImagePreprocessor(nn.Module):
 #     return logits
 #
 #
-# class EmbeddingDecoder(hk.Module):
-#   """Haiku module to decode embeddings."""
-#
-#   def __init__(self, embedding_matrix: jnp.ndarray, name='embedding_decoder'):
-#     """Constructs the module.
-#     Args:
-#       embedding_matrix: Array of shape [vocab_size, d_model].
-#       name: Name of the module.
-#     """
-#     super().__init__(name=name)
-#     self._embedding_matrix = embedding_matrix
-#     self._vocab_size, self._d_model = embedding_matrix.shape
-#
-#   def __call__(self, embeddings: jnp.ndarray) -> jnp.ndarray:
-#     batch_size, seq_len, _ = embeddings.shape
-#     output = jnp.matmul(
-#         embeddings.reshape([-1, self._d_model]),  # Flatten batch dim
-#         jnp.transpose(self._embedding_matrix))
-#     bias = hk.get_parameter('bias', shape=[self._vocab_size], init=jnp.zeros)
-#     output = output + bias
-#     return output.reshape([batch_size, seq_len, self._vocab_size])
+class EmbeddingDecoder(nn.Module):
+  """Pytorech module to decode embeddings."""
+
+  def __init__(self, embedding: nn.Embedding):
+    """Constructs the module.
+    Args:
+      embedding: Embedding module to use.
+    """
+    super().__init__()
+    self._embedding = embedding
+    self._vocab_size, self._d_model = embedding.weight.shape
+    self.bias = nn.Parameter(torch.zeros(self._vocab_size))
+
+  def forward(self, embeddings: torch.Tensor) -> torch.Tensor:
+    batch_size, seq_len, _ = embeddings.shape
+    output = torch.matmul(
+        embeddings.reshape([-1, self._d_model]),  # Flatten batch dim
+        self._embedding.weight.T)
+    output = output + self.bias
+    return output.reshape([batch_size, seq_len, self._vocab_size])
+
+  def set_haiku_params(self, params):
+      with torch.no_grad():
+          self.bias.copy_(torch.from_numpy(params["bias"]).float())
+
+

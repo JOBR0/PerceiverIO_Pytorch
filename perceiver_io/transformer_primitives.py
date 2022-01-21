@@ -13,7 +13,7 @@ from perceiver_io.utils import init_linear_from_haiku, init_layer_norm_from_haik
 def make_cross_attention_mask(query_mask, kv_mask):
     batch_size, query_len = query_mask.shape
     _, key_len = kv_mask.shape
-    mask = torch.vmap(torch.outer)(query_mask, kv_mask)
+    mask = torch.einsum('bi,bj->bij', (query_mask, kv_mask))
     assert mask.shape == (batch_size, query_len, key_len)
     return mask
 

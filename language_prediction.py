@@ -50,13 +50,13 @@ def pad(max_sequence_length: int, inputs, input_mask):
 inputs, input_mask = pad(MAX_SEQ_LEN, inputs, input_mask)
 
 inputs = torch.from_numpy(inputs)
-input_mask = torch.from_numpy(input_mask)
-
-out = model(inputs, input_masks=input_mask)
+input_mask = torch.from_numpy(input_mask).bool()
+with torch.inference_mode():
+    out = model(inputs, input_masks=input_mask)
 
 masked_tokens_predictions = out[0, 51:60].argmax(axis=-1)
 print("Greedy predictions:")
 print(masked_tokens_predictions)
 print()
 print("Predicted string:")
-print(tokenizer.to_string(masked_tokens_predictions))
+print(tokenizer.to_string(masked_tokens_predictions.numpy()))
