@@ -1,13 +1,12 @@
+import os
+
 import cv2
 import torch
 
-from PIL import Image
 import numpy as np
-import matplotlib.pyplot as plt
 
-from flow_utils import flow_to_image
 from perceiver_io.classification_perceiver import ClassificationPerceiver
-from perceiver_io.utils import load_image
+from utils.utils import load_image
 
 from torchvision import transforms
 

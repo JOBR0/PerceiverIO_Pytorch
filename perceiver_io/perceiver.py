@@ -5,9 +5,9 @@ import torch
 import torch.nn as nn
 from timm.models.layers import lecun_normal_
 
-from perceiver_io import position_encoding
+from perceiver_io import position_encoding, io_processors
 from perceiver_io.transformer_primitives import CrossAttention, SelfAttention, make_cross_attention_mask
-from perceiver_io.utils import init_linear_from_haiku
+from utils.utils import init_linear_from_haiku
 
 
 class AbstractPerceiverDecoder(nn.Module, metaclass=abc.ABCMeta):

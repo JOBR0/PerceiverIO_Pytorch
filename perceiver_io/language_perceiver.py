@@ -1,23 +1,18 @@
-import itertools
 import pickle
 import warnings
-from typing import Sequence
+
 
 import torch.nn as nn
 import torch
 
-from perceiver_io.bytes_tokenizer import BytesTokenizer
+
 from perceiver_io.io_processors import EmbeddingDecoder
 from perceiver_io.perceiver import PerceiverEncoder, Perceiver
-from perceiver_io import io_processors
-from timm.models.layers import to_2tuple
 
-import torch.nn.functional as F
-from torch.cuda.amp import autocast
 
 from perceiver_io.perceiver import AbstractPerceiverDecoder, BasicDecoder
 from perceiver_io.position_encoding import TrainablePositionEncoding
-from perceiver_io.utils import init_embedding_from_haiku
+from utils.utils import init_embedding_from_haiku
 
 
 class LanguagePerceiver(nn.Module):
