@@ -15,6 +15,9 @@ import imageio
 
 import torch.nn.functional as F
 
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+print("Device:", device)
+
 MEAN_RGB = (0.485 * 255, 0.456 * 255, 0.406 * 255)
 STDDEV_RGB = (0.229 * 255, 0.224 * 255, 0.225 * 255)
 
@@ -24,9 +27,18 @@ normalize = transforms.Normalize(MEAN_RGB, STDDEV_RGB)
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-perceiver = ClassificationPerceiver()
+perceiver = ClassificationPerceiver(num_classes=1000,
+                                    img_size=img_size)
 
-perceiver.load_haiku_params("./haiku_models/imagenet_conv_preprocessing.pystate")
+ckpt_file = "./pytorch_checkpoints/classify_perceiver_io_conv_preprocessing.pth"
+
+# check if file exists
+if not os.path.isfile(ckpt_file):
+    raise ValueError("Please download the model checkpoint and place it in /pytorch_checkpoints")
+
+checkpoint = torch.load(ckpt_file, map_location=device)
+
+perceiver.load_state_dict(checkpoint['model_state_dict'])
 perceiver.eval()
 
 # img = load_image("./sample_data/dalmation.jpg", device)

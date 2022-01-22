@@ -1,23 +1,25 @@
 import os
-import torch
 
-from PIL import Image
-import numpy as np
+import torch
 import matplotlib.pyplot as plt
 
 from utils.flow_utils import flow_to_image
-from perceiver_io.flow_perceiver import FlowPerceiver
 from utils.utils import load_image
+from perceiver_io.flow_perceiver import FlowPerceiver
+
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+print("Device:", device)
 
 perceiver = FlowPerceiver(img_size=(368, 496))
 
+ckpt_file = "./pytorch_checkpoints/flow_perceiver_io.pth"
+
 # check if file exists
-if not os.path.isfile("./pytorch_checkpoints/flow_perceiver_io.pth"):
+if not os.path.isfile(ckpt_file):
     raise ValueError("Please download the model checkpoint and place it in /pytorch_checkpoints")
 
-checkpoint = torch.load("./pytorch_checkpoints/flow_perceiver_io.pth", map_location=device)
+checkpoint = torch.load(ckpt_file, map_location=device)
 
 perceiver.load_state_dict(checkpoint['model_state_dict'])
 
