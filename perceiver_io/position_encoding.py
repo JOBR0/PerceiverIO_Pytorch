@@ -23,6 +23,8 @@ import torch
 import torch.nn as nn
 from timm.models.layers import trunc_normal_, lecun_normal_
 
+from utils.utils import init_linear_from_haiku
+
 
 def generate_fourier_features(
         pos, num_bands, max_resolution=(224, 224),
@@ -92,7 +94,7 @@ def build_linear_positions(index_dims, output_range=(-1.0, 1.0)):
 
     dim_ranges = [
         _linspace(n_xels_per_dim) for n_xels_per_dim in index_dims]
-    array_index_grid = torch.meshgrid(*dim_ranges)
+    array_index_grid = torch.meshgrid(*dim_ranges, indexing="ij")
 
     return torch.stack(array_index_grid, axis=-1)
 
@@ -198,6 +200,7 @@ class PositionEncodingProjector(AbstractPositionEncoding):
         super().__init__()
         self._base_position_encoding = base_position_encoding
         self._projector = nn.Linear(input_size, output_size)
+        self._output_channels = output_size
         lecun_normal_(self._projector.weight)
         nn.init.constant_(self._projector.bias, 0)
 
@@ -205,6 +208,19 @@ class PositionEncodingProjector(AbstractPositionEncoding):
         base_pos = self._base_position_encoding(batch_size, pos)
         projected_pos = self._projector(base_pos)
         return projected_pos
+
+    def n_output_channels(self):
+        return self._output_channels
+
+    def set_haiku_params(self, params, base_params = None):
+        init_linear_from_haiku(self._projector, params.pop("linear"))
+        if base_params is not None:
+            self._base_position_encoding.set_haiku_params(base_params)
+
+        if len(params) != 0:
+            warnings.warn(f"Some parameters couldn't be matched to model: {params.keys()}")
+
+
 
 
 def build_position_encoding(
@@ -230,11 +246,10 @@ def build_position_encoding(
         raise ValueError(f'Unknown position encoding: {position_encoding_type}.')
 
     if project_pos_dim > 0:
-        raise NotImplementedError
-        # # Project the position encoding to a target dimension:
-        # output_pos_enc = PositionEncodingProjector(
-        #     input_size=
-        #     output_size=project_pos_dim,
-        #     base_position_encoding=output_pos_enc)
+        # Project the position encoding to a target dimension:
+        output_pos_enc = PositionEncodingProjector(
+            input_size=output_pos_enc.n_output_channels(),
+            output_size=project_pos_dim,
+            base_position_encoding=output_pos_enc)
 
     return output_pos_enc

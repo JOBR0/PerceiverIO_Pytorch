@@ -28,8 +28,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from perceiver_io.perceiver import position_encoding
-from perceiver_io.utils import conv_output_shape, init_linear_from_haiku, same_padding, init_conv_from_haiku, \
+from perceiver_io import position_encoding
+from utils.utils import conv_output_shape, init_linear_from_haiku, same_padding, init_conv_from_haiku, \
     init_batchnorm_from_haiku
 
 ModalitySizeT = Mapping[str, int]
@@ -180,7 +180,6 @@ class Conv2DDownsample(nn.Module):
                 batchnorm = nn.BatchNorm2d(num_features=num_channels)
                 self.norms.append(batchnorm)
 
-
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
         out = inputs
         for l, conv in enumerate(self.convs):
@@ -212,7 +211,7 @@ class Conv2DDownsample(nn.Module):
                 name = "batchnorm" + suffix
 
                 norm_state = {key[key.find('/') + 1:]: state.pop(key) for key in list(state.keys()) if
-                                             key.startswith(name)}
+                              key.startswith(name)}
 
                 norm_state = {key[key.find('/') + 1:]: norm_state[key] for key in norm_state.keys()}
 
@@ -223,7 +222,6 @@ class Conv2DDownsample(nn.Module):
 
         if len(state) != 0:
             warnings.warn(f"Some state variables couldn't be matched to model: {state.keys()}")
-
 
 
 class Conv2DUpsample(nn.Module):
@@ -247,7 +245,7 @@ class Conv2DUpsample(nn.Module):
                                                stride=2,
                                                padding=0,
                                                output_padding=0,
-                                                bias=True)
+                                               bias=True)
 
         self.transp_conv1 = hk.Conv2DTranspose(
             output_channels=n_outputs * 2,
@@ -282,45 +280,44 @@ class Conv2DUpsample(nn.Module):
         out = self.transp_conv2(out)
 
         return out
-#
-#
-# class Conv3DUpsample(hk.Module):
-#     """Simple convolutional auto-encoder."""
-#
-#     def __init__(self,
-#                  n_outputs: int,
-#                  n_time_upsamples: int = 2,
-#                  n_space_upsamples: int = 4,
-#                  name: Optional[str] = None):
-#
-#         super().__init__(name=name)
-#
-#         self._n_outputs = n_outputs
-#         self._n_time_upsamples = n_time_upsamples
-#         self._n_space_upsamples = n_space_upsamples
-#
-#     def __call__(self, x: jnp.ndarray, *, is_training: bool) -> jnp.ndarray:
-#         n_upsamples = max(self._n_time_upsamples, self._n_space_upsamples)
-#
-#         time_stride = 2
-#         space_stride = 2
-#
-#         for i in range(n_upsamples):
-#             if i >= self._n_time_upsamples:
-#                 time_stride = 1
-#             if i >= self._n_space_upsamples:
-#                 space_stride = 1
-#
-#             channels = self._n_outputs * pow(2, n_upsamples - 1 - i)
-#
-#             x = hk.Conv3DTranspose(output_channels=channels,
-#                                    stride=[time_stride, space_stride, space_stride],
-#                                    kernel_shape=[4, 4, 4],
-#                                    name=f'conv3d_transpose_{i}')(x)
-#             if i != n_upsamples - 1:
-#                 x = jax.nn.relu(x)
-#
-#         return x
+
+
+class Conv3DUpsample(nn.Module):
+    """Simple convolutional auto-encoder."""
+
+    def __init__(self,
+                 n_outputs: int,
+                 n_time_upsamples: int = 2,
+                 n_space_upsamples: int = 4):
+
+        super().__init__()
+
+        self._n_outputs = n_outputs
+        self._n_time_upsamples = n_time_upsamples
+        self._n_space_upsamples = n_space_upsamples
+
+    def __call__(self, x: torch.Tensor, *, is_training: bool) -> torch.Tensor:
+        n_upsamples = max(self._n_time_upsamples, self._n_space_upsamples)
+
+        time_stride = 2
+        space_stride = 2
+
+        for i in range(n_upsamples):
+            if i >= self._n_time_upsamples:
+                time_stride = 1
+            if i >= self._n_space_upsamples:
+                space_stride = 1
+
+            channels = self._n_outputs * pow(2, n_upsamples - 1 - i)
+
+            x = hk.Conv3DTranspose(output_channels=channels,
+                                   stride=[time_stride, space_stride, space_stride],
+                                   kernel_shape=[4, 4, 4],
+                                   name=f'conv3d_transpose_{i}')(x)
+            if i != n_upsamples - 1:
+                x = F.relu(x)
+
+        return x
 
 
 class ImagePreprocessor(nn.Module):
@@ -354,14 +351,13 @@ class ImagePreprocessor(nn.Module):
             raise ValueError(
                 f'Invalid value {concat_or_add_pos} for concat_or_add_pos.')
 
-        if prep_type not in ["patches", "pixels", "conv"]:
-            raise NotImplementedError
 
         self._prep_type = prep_type
         self._spatial_downsample = spatial_downsample
         self._temporal_downsample = temporal_downsample
         self._concat_or_add_pos = concat_or_add_pos
         self._conv_after_patching = conv_after_patching
+        self._position_encoding_type = position_encoding_type
 
         input_channels = input_shape[-1]
 
@@ -383,11 +379,14 @@ class ImagePreprocessor(nn.Module):
 
         elif self._prep_type == 'conv1x1':
             assert temporal_downsample == 1, 'conv1x1 does not downsample in time.'
-            # self.convnet_1x1 = nn.Conv2d(
-            #     num_channels, kernel_size=[1, 1],
-            #     # spatial_downsample is unconstrained for 1x1 convolutions.
-            #     stride=[spatial_downsample, spatial_downsample])
-            #TODO initialization
+            self.convnet_1x1 = nn.Conv2d(
+                in_channels=input_channels,
+                out_channels=num_channels,
+                kernel_size=1,
+                # spatial_downsample is unconstrained for 1x1 convolutions.
+                stride=[spatial_downsample, spatial_downsample])
+            trunc_normal_(self.convnet_1x1.weight, mean=0.0, std=0.01)
+            nn.init.constant_(self.convnet_1x1.bias, 0)
 
         self.index_dims = [d // spatial_downsample for d in input_shape[:-1]]
 
@@ -402,13 +401,20 @@ class ImagePreprocessor(nn.Module):
             raise NotImplementedError
 
         if self._conv_after_patching:
-            self._conv_after_patch_layer = nn.Linear(input_shape[-1]*spatial_downsample*temporal_downsample, num_channels)
+            self._conv_after_patch_layer = nn.Linear(input_shape[-1] * spatial_downsample * temporal_downsample,
+                                                     num_channels)
             lecun_normal_(self._conv_after_patch_layer.weight)
             nn.init.constant_(self._conv_after_patch_layer.bias, 0)
 
-
-
-        self.output_channels = num_channels
+        if prep_type == "pixels":
+            self.output_channels = input_channels
+        elif prep_type == "patches":
+            if conv_after_patching:
+                self.output_channels = num_channels
+            else:
+                self.output_channels = input_shape[-1] * spatial_downsample * temporal_downsample
+        else:
+            self.output_channels = num_channels
 
         if concat_or_add_pos == 'concat':
             self.output_channels += self._positional_encoding.n_output_channels()
@@ -421,7 +427,6 @@ class ImagePreprocessor(nn.Module):
             network_input_is_1d: bool = True) -> Tuple[torch.Tensor, torch.Tensor]:
         """Construct the final input, including position encoding."""
         batch_size = inputs.shape[0]
-
 
         # Reshape input features to a 1D index dimension if necessary.
         if len(inputs.shape) > 3 and network_input_is_1d:
@@ -462,7 +467,6 @@ class ImagePreprocessor(nn.Module):
                 b, t, _, _, _ = inputs.shape
                 inputs = inputs.view(b * t, *inputs.shape[2:])
 
-
             # Convnet image featurization.
             # Downsamples spatially by a factor of 4
             inputs = inputs.permute(0, 3, 1, 2)
@@ -475,11 +479,11 @@ class ImagePreprocessor(nn.Module):
 
 
         elif self._prep_type == 'conv1x1':
-            #TODO check channel position
+            # TODO check channel position
             # maps inputs to 64d
             if len(inputs.shape) == 5:
                 b, t, _, _, _ = inputs.shape
-                inputs = inputs.view(b*t, *inputs.shape[2:])
+                inputs = inputs.view(b * t, *inputs.shape[2:])
                 inputs = self.convnet_1x1(inputs)
                 inputs = inputs.view(b, t, *inputs.shape[1:])
             else:
@@ -515,18 +519,33 @@ class ImagePreprocessor(nn.Module):
         modality_sizes = None  # Size for each modality, only needed for multimodal
         return inputs, modality_sizes, inputs_without_pos
 
-    def set_haiku_params(self, params, state):
+    def set_haiku_params(self, params, state=None):
         params = {key[key.find('/') + 1:]: params[key] for key in params.keys()}
-        state = {key[key.find('/') + 1:]: state[key] for key in state.keys()}
 
-        if self._prep_type == 'conv':
+        if state is not None:
+            state = {key[key.find('/') + 1:]: state[key] for key in state.keys()}
+
+        if self._prep_type == "conv":
             conv2_d_downsample_params = {key[key.find('/') + 1:]: params.pop(key) for key in list(params.keys()) if
-                                    key.startswith("conv2_d_downsample")}
+                                         key.startswith("conv2_d_downsample")}
             conv2_d_downsample_state = {key[key.find('/') + 1:]: state.pop(key) for key in list(state.keys()) if
-                                    key.startswith("conv2_d_downsample")}
+                                        key.startswith("conv2_d_downsample")}
             self.convnet.set_haiku_params(conv2_d_downsample_params, conv2_d_downsample_state)
+        elif self._prep_type == "conv1x1":
+            init_conv_from_haiku(self.convnet_1x1, params.pop("conv2_d"))
+
+        position_encoding_projector = {key[key.find('/') + 1:]: params.pop(key) for key in list(params.keys()) if
+                                     key.startswith("position_encoding_projector")}
+
+        if len(position_encoding_projector) > 0:
+            if self._position_encoding_type == "trainable":
+                self._positional_encoding.set_haiku_params(position_encoding_projector, params.pop("trainable_position_encoding"))
+            else:
+                self._positional_encoding.set_haiku_params(position_encoding_projector)
 
 
+        elif self._position_encoding_type == "trainable":
+            self.pos_enc.set_haiku_params(params.pop("trainable_position_encoding"))
 
         if self._conv_after_patching:
             init_linear_from_haiku(self._conv_after_patch_layer, params.pop("patches_linear"))
@@ -536,392 +555,385 @@ class ImagePreprocessor(nn.Module):
 
 
 class ImagePostprocessor(nn.Module):
-  """Image postprocessing for Perceiver."""
+    """Image postprocessing for Perceiver."""
 
-  def __init__(
-      self,
-      postproc_type: str = 'pixels',
-      spatial_upsample: int = 1,
-      temporal_upsample: int = 1,
-      n_outputs: int = -1,  # only relevant for 'conv1x1', 'conv', and 'raft'
-      input_reshape_size: Optional[Sequence[int]] = None):
-    super().__init__()
+    def __init__(
+            self,
+            postproc_type: str = 'pixels',
+            spatial_upsample: int = 1,
+            temporal_upsample: int = 1,
+            n_outputs: int = -1,  # only relevant for 'conv1x1', 'conv', and 'raft'
+            input_reshape_size: Optional[Sequence[int]] = None):
+        super().__init__()
 
-    if postproc_type not in ('conv', 'patches', 'pixels', 'raft', 'conv1x1'):
-      raise ValueError('Invalid postproc_type!')
+        if postproc_type not in ('conv', 'patches', 'pixels', 'raft', 'conv1x1'):
+            raise ValueError('Invalid postproc_type!')
 
-    # Architecture parameters:
-    self._postproc_type = postproc_type
+        # Architecture parameters:
+        self._postproc_type = postproc_type
 
-    self._temporal_upsample = temporal_upsample
-    self._spatial_upsample = spatial_upsample
-    self._input_reshape_size = input_reshape_size
+        self._temporal_upsample = temporal_upsample
+        self._spatial_upsample = spatial_upsample
+        self._input_reshape_size = input_reshape_size
 
-    if self._postproc_type == 'pixels':
-      # No postprocessing.
-      if self._temporal_upsample != 1 or self._spatial_upsample != 1:
-        raise ValueError('Pixels postprocessing should not currently upsample.')
-    elif self._postproc_type == 'conv1x1':
-      assert self._temporal_upsample == 1, 'conv1x1 does not upsample in time.'
-      if n_outputs == -1:
-        raise ValueError('Expected value for n_outputs')
-      self.conv1x1 = hk.Conv2D(
-          n_outputs, kernel_shape=[1, 1],
-          # spatial_downsample is unconstrained for 1x1 convolutions.
-          stride=[self._spatial_upsample, self._spatial_upsample])
-    elif self._postproc_type == 'conv':
-      if n_outputs == -1:
-        raise ValueError('Expected value for n_outputs')
-      if self._temporal_upsample != 1:
-        def int_log2(x):
-          return int(np.round(np.log(x) / np.log(2)))
-        self.convnet = Conv3DUpsample(
-            n_outputs, int_log2(temporal_upsample), int_log2(spatial_upsample))
-      else:
-        self.convnet = Conv2DUpsample(n_outputs)
+        if self._postproc_type == 'pixels':
+            # No postprocessing.
+            if self._temporal_upsample != 1 or self._spatial_upsample != 1:
+                raise ValueError('Pixels postprocessing should not currently upsample.')
+        elif self._postproc_type == 'conv1x1':
+            assert self._temporal_upsample == 1, 'conv1x1 does not upsample in time.'
+            if n_outputs == -1:
+                raise ValueError('Expected value for n_outputs')
+            self.conv1x1 = hk.Conv2D(
+                n_outputs, kernel_shape=[1, 1],
+                # spatial_downsample is unconstrained for 1x1 convolutions.
+                stride=[self._spatial_upsample, self._spatial_upsample])
+        elif self._postproc_type == 'conv':
+            if n_outputs == -1:
+                raise ValueError('Expected value for n_outputs')
+            if self._temporal_upsample != 1:
+                def int_log2(x):
+                    return int(np.round(np.log(x) / np.log(2)))
 
-  def forward(
-      self, inputs: torch.Tensor, *,
-      is_training: bool,
-      pos: Optional[torch.Tensor] = None,
-      modality_sizes: Optional[ModalitySizeT] = None) -> torch.Tensor:
-    if self._input_reshape_size is not None:
-      inputs = torch.reshape(
-          inputs,
-          [inputs.shape[0]] + list(self._input_reshape_size)
-          + [inputs.shape[-1]])
+                self.convnet = Conv3DUpsample(
+                    n_outputs, int_log2(temporal_upsample), int_log2(spatial_upsample))
+            else:
+                self.convnet = Conv2DUpsample(n_outputs)
 
-    if self._postproc_type == 'conv' or self._postproc_type == 'raft':
-      # Convnet image featurization.
-      conv = self.convnet
-      if len(inputs.shape) == 5 and self._temporal_upsample == 1:
-        conv = hk.BatchApply(conv)
-      inputs = conv(inputs, is_training=is_training)
-    elif self._postproc_type == 'conv1x1':
-      inputs = self.conv1x1(inputs)
-    elif self._postproc_type == 'patches':
-      inputs = reverse_space_to_depth(
-          inputs, self._temporal_upsample, self._spatial_upsample)
+    def forward(
+            self, inputs: torch.Tensor, *,
+            is_training: bool,
+            pos: Optional[torch.Tensor] = None,
+            modality_sizes: Optional[ModalitySizeT] = None) -> torch.Tensor:
+        if self._input_reshape_size is not None:
+            inputs = torch.reshape(
+                inputs,
+                [inputs.shape[0]] + list(self._input_reshape_size)
+                + [inputs.shape[-1]])
 
-    return inputs
+        if self._postproc_type == 'conv' or self._postproc_type == 'raft':
+            # Convnet image featurization.
+            conv = self.convnet
+            if len(inputs.shape) == 5 and self._temporal_upsample == 1:
+                conv = hk.BatchApply(conv)
+            inputs = conv(inputs, is_training=is_training)
+        elif self._postproc_type == 'conv1x1':
+            inputs = self.conv1x1(inputs)
+        elif self._postproc_type == 'patches':
+            inputs = reverse_space_to_depth(
+                inputs, self._temporal_upsample, self._spatial_upsample)
+
+        return inputs
 
 
 class OneHotPreprocessor(nn.Module):
-  """One-hot preprocessor for Perceiver Encoder."""
+    """One-hot preprocessor for Perceiver Encoder."""
 
-  def __init__(self):
-    super().__init__()
+    def __init__(self):
+        super().__init__()
 
-  def __call__(self, inputs: torch.Tensor, *,
-               pos: Optional[torch.Tensor] = None,
-               network_input_is_1d: bool = True) -> PreprocessorOutputT:
-    # Add a dummy index dimension.
-    inputs = inputs[:, None, :]
+    def __call__(self, inputs: torch.Tensor, *,
+                 pos: Optional[torch.Tensor] = None,
+                 network_input_is_1d: bool = True) -> PreprocessorOutputT:
+        # Add a dummy index dimension.
+        inputs = inputs[:, None, :]
 
-    #TODO whats the point of this?
+        # TODO whats the point of this?
 
-    # No position encodings, so the 1st (input) and 3rd (inputs_without_pos)
-    # outputs are identical.
-    return inputs, None, inputs
+        # No position encodings, so the 1st (input) and 3rd (inputs_without_pos)
+        # outputs are identical.
+        return inputs, None, inputs
 
-#
-# class AudioPreprocessor(hk.Module):
-#   """Audio preprocessing for Perceiver Encoder."""
-#
-#   def __init__(
-#       self,
-#       prep_type: str = 'patches',
-#       samples_per_patch: int = 96,
-#       position_encoding_type: str = 'fourier',
-#       n_extra_pos_mlp: int = 0,
-#       concat_or_add_pos: str = 'concat',
-#       name: Optional[str] = None,
-#       **position_encoding_kwargs):
-#     super().__init__(name=name)
-#
-#     if prep_type not in ('patches',):
-#       raise ValueError('Invalid prep_type!')
-#
-#     if concat_or_add_pos not in ['concat', 'add']:
-#       raise ValueError(
-#           f'Invalid value {concat_or_add_pos} for concat_or_add_pos.')
-#
-#     self._samples_per_patch = samples_per_patch
-#     self._concat_or_add_pos = concat_or_add_pos
-#
-#     # Partially construct the positional encoding function.
-#     # We fully construct it when we know the input size.
-#     self._positional_encoding_ctor = functools.partial(
-#         position_encoding.build_position_encoding,
-#         position_encoding_type=position_encoding_type,
-#         **position_encoding_kwargs)
-#
-#     # for deeper positional embeddings
-#     self._n_extra_pos_mlp = n_extra_pos_mlp
-#
-#   def _build_network_inputs(
-#       self, inputs: jnp.ndarray,
-#       pos: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
-#     """Construct the final input, including position encoding."""
-#     batch_size = inputs.shape[0]
-#     index_dims = inputs.shape[1:-1]
-#
-#     # Construct the position encoding.
-#     pos_enc = self._positional_encoding_ctor(
-#         index_dims=index_dims)(batch_size=batch_size, pos=pos)
-#
-#     for i in range(0, self._n_extra_pos_mlp):
-#       pos_enc += hk.Linear(pos_enc.shape[-1])(pos_enc)
-#       if i < (self._n_extra_pos_mlp-1):
-#         pos_enc = jax.nn.relu(pos_enc)
-#
-#     if self._concat_or_add_pos == 'concat':
-#       inputs_with_pos = jnp.concatenate([inputs, pos_enc], axis=-1)
-#     elif self._concat_or_add_pos == 'add':
-#       inputs_with_pos = inputs + pos_enc
-#
-#     return inputs_with_pos, inputs
-#
-#   def __call__(self, inputs: jnp.ndarray, *,
-#                is_training: bool,
-#                pos: Optional[jnp.ndarray] = None,
-#                network_input_is_1d: bool = True) -> PreprocessorOutputT:
-#     inputs = jnp.reshape(inputs, [inputs.shape[0], -1,
-#                                   self._samples_per_patch])
-#
-#     inputs, inputs_without_pos = self._build_network_inputs(inputs, pos)
-#     modality_sizes = None  # Size for each modality, only needed for multimodal
-#     return inputs, modality_sizes, inputs_without_pos
-#
-#
-# class AudioPostprocessor(hk.Module):
-#   """Audio postprocessing for Perceiver."""
-#
-#   def __init__(
-#       self,
-#       postproc_type: str = 'patches',  # 'conv', 'patches', 'pixels'
-#       samples_per_patch: int = 96,
-#       name: Optional[str] = None):
-#     super().__init__(name=name)
-#
-#     if postproc_type not in ('patches',):
-#       raise ValueError('Invalid postproc_type!')
-#     self._samples_per_patch = samples_per_patch
-#
-#     # Architecture parameters:
-#     self._postproc_type = postproc_type
-#
-#   def __call__(self, inputs: jnp.ndarray, *,
-#                is_training: bool,
-#                pos: Optional[jnp.ndarray] = None,
-#                modality_sizes: Optional[ModalitySizeT] = None) -> jnp.ndarray:
-#     out = hk.Linear(self._samples_per_patch)(inputs)
-#     return jnp.reshape(out, [inputs.shape[0], -1])
-#
-#
-# class IdentityPostprocessor(hk.Module):
-#   """Passes through the inputs unchanged."""
-#
-#   def __init__(self, name: Optional[str] = None):
-#     super().__init__(name=name)
-#
-#   def __call__(self, inputs: jnp.ndarray, *,
-#                is_training: bool,
-#                pos: Optional[jnp.ndarray] = None,
-#                modality_sizes: Optional[ModalitySizeT] = None) -> jnp.ndarray:
-#     return inputs
-#
-#
-# def restructure(modality_sizes: ModalitySizeT,
-#                 inputs: jnp.ndarray) -> Mapping[str, jnp.ndarray]:
-#   """Partitions a [B, N, C] tensor into tensors for each modality.
-#   Args:
-#     modality_sizes: dict specifying the size of the modality
-#     inputs: input tensor
-#   Returns:
-#     dict mapping name of modality to its associated tensor.
-#   """
-#   outputs = {}
-#   index = 0
-#   # Apply a predictable ordering to the modalities
-#   for modality in sorted(modality_sizes.keys()):
-#     size = modality_sizes[modality]
-#     inp = inputs[:, index:index + size]
-#     index += size
-#     outputs[modality] = inp
-#   return outputs
-#
-#
-# class MultimodalPreprocessor(hk.Module):
-#   """Multimodal preprocessing for Perceiver Encoder.
-#   Inputs for each modality is preprocessed then padded with trainable position
-#   embeddings to have the same number of channels.
-#   """
-#
-#   def __init__(
-#       self,
-#       modalities: Mapping[str, PreprocessorT],
-#       mask_probs: Optional[Mapping[str, float]] = None,
-#       min_padding_size: int = 2,
-#       name: Optional[str] = None):
-#     """Constructor.
-#     Args:
-#       modalities: dict mapping modality name to preprocessor
-#       mask_probs: dict mapping modality name to masking probability of that
-#         modality
-#       min_padding_size: the minimum padding size for all modalities.
-#         The final output will have num_channels equal to the maximum channels
-#         across all modalities plus min_padding_size.
-#       name: name of module
-#     """
-#     super().__init__(name=name)
-#     self._modalities = modalities
-#     self._min_padding_size = min_padding_size
-#     self._mask_probs = mask_probs
-#
-#   def __call__(self, inputs: jnp.ndarray, *,
-#                is_training: bool,
-#                pos: Optional[jnp.ndarray] = None,
-#                network_input_is_1d: bool = True) -> PreprocessorOutputT:
-#     outputs = {}
-#     inputs_without_pos = {}
-#     for modality, preprocessor in self._modalities.items():
-#       outputs[modality], _, inputs_without_pos[modality] = preprocessor(
-#           inputs[modality], is_training=is_training, pos=pos,
-#           network_input_is_1d=network_input_is_1d)
-#
-#     common_channel_size = (max(o.shape[2] for o in outputs.values())
-#                            + self._min_padding_size)
-#
-#     padded = {}
-#     modality_sizes = {}
-#     for modality, output in outputs.items():
-#       pos_enc = position_encoding.TrainablePositionEncoding(
-#           1, num_channels=common_channel_size-output.shape[2],
-#           init_scale=0.02, name=f'{modality}_padding')
-#       padding = jnp.broadcast_to(
-#           pos_enc(batch_size=output.shape[0]),
-#           [output.shape[0], output.shape[1],
-#            common_channel_size-output.shape[2]])
-#       output_padded = jnp.concatenate([output, padding], axis=2)
-#
-#       if self._mask_probs is not None:
-#         # Randomly mask out each token corresponding to this modality
-#         mask_token = position_encoding.TrainablePositionEncoding(
-#             1, num_channels=output_padded.shape[2],
-#             init_scale=0.02, name=f'{modality}_mask_token')(output.shape[0])
-#         mask_prob = self._mask_probs[modality]
-#         rng = hk.next_rng_key()
-#         mask = jax.random.bernoulli(rng, mask_prob,
-#                                     shape=[output.shape[0], output.shape[1]])
-#         mask = jnp.expand_dims(mask, axis=2)
-#         output_padded = (1 - mask) * output_padded + mask * mask_token
-#
-#       padded[modality] = output_padded
-#       modality_sizes[modality] = output_padded.shape[1]
-#
-#     # Apply a predictable ordering to the modalities
-#     padded_ls = [padded[k] for k in sorted(padded.keys())]
-#     return (jnp.concatenate(padded_ls, axis=1),
-#             modality_sizes,
-#             inputs_without_pos)
-#
-#
-# class MultimodalPostprocessor(hk.Module):
-#   """Multimodal postprocessing for Perceiver."""
-#
-#   def __init__(
-#       self,
-#       modalities: Mapping[str, PostprocessorT],
-#       input_is_dict: bool = False,
-#       name: Optional[str] = None):
-#     """Constructor.
-#     Args:
-#       modalities: dict mapping modality name to post processor for that modality
-#       input_is_dict: If True, input is assumed to be dictionary structured,
-#         and outputs keep the same dictionary shape. If False, input is a tensor
-#         which is sliced up during postprocessing by `modality_sizes`.
-#       name: name of the module
-#     """
-#     super().__init__(name=name)
-#     self._modalities = modalities
-#     self._input_is_dict = input_is_dict
-#
-#   def __call__(
-#       self, inputs: jnp.ndarray, *,
-#       is_training: bool,
-#       pos: Optional[jnp.ndarray] = None,
-#       modality_sizes: Optional[ModalitySizeT] = None) -> Mapping[str,
-#                                                                  jnp.ndarray]:
-#     if not self._input_is_dict:
-#       # Slice up modalities by their sizes.
-#       assert modality_sizes is not None
-#       inputs = restructure(modality_sizes=modality_sizes, inputs=inputs)
-#     outputs = {modality: postprocessor(
-#         inputs[modality], is_training=is_training, pos=pos, modality_sizes=None)
-#                for modality, postprocessor in self._modalities.items()}
-#     return outputs
-#
-#
+
+class AudioPreprocessor(nn.Module):
+    """Audio preprocessing for Perceiver Encoder."""
+
+    def __init__(
+            self,
+            prep_type: str = 'patches',
+            samples_per_patch: int = 96,
+            position_encoding_type: str = 'fourier',
+            n_extra_pos_mlp: int = 0,
+            concat_or_add_pos: str = 'concat',
+            **position_encoding_kwargs):
+        super().__init__()
+
+        if prep_type not in ('patches',):
+            raise ValueError('Invalid prep_type!')
+
+        if concat_or_add_pos not in ['concat', 'add']:
+            raise ValueError(
+                f'Invalid value {concat_or_add_pos} for concat_or_add_pos.')
+
+        self._samples_per_patch = samples_per_patch
+        self._concat_or_add_pos = concat_or_add_pos
+
+        # Partially construct the positional encoding function.
+        # We fully construct it when we know the input size.
+        self._positional_encoding_ctor = functools.partial(
+            position_encoding.build_position_encoding,
+            position_encoding_type=position_encoding_type,
+            **position_encoding_kwargs)
+
+        # for deeper positional embeddings
+        self._n_extra_pos_mlp = n_extra_pos_mlp
+
+    def _build_network_inputs(
+            self, inputs: torch.Tensor,
+            pos: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Construct the final input, including position encoding."""
+        batch_size = inputs.shape[0]
+        index_dims = inputs.shape[1:-1]
+
+        # Construct the position encoding.
+        pos_enc = self._positional_encoding_ctor(
+            index_dims=index_dims)(batch_size=batch_size, pos=pos)
+
+        for i in range(0, self._n_extra_pos_mlp):
+            pos_enc += hk.Linear(pos_enc.shape[-1])(pos_enc)
+            if i < (self._n_extra_pos_mlp - 1):
+                pos_enc = jax.nn.relu(pos_enc)
+
+        if self._concat_or_add_pos == 'concat':
+            inputs_with_pos = torch.concatenate([inputs, pos_enc], axis=-1)
+        elif self._concat_or_add_pos == 'add':
+            inputs_with_pos = inputs + pos_enc
+
+        return inputs_with_pos, inputs
+
+    def forward(self, inputs: torch.Tensor, *,
+                is_training: bool,
+                pos: Optional[torch.Tensor] = None,
+                network_input_is_1d: bool = True) -> PreprocessorOutputT:
+        inputs = torch.reshape(inputs, [inputs.shape[0], -1,
+                                        self._samples_per_patch])
+
+        inputs, inputs_without_pos = self._build_network_inputs(inputs, pos)
+        modality_sizes = None  # Size for each modality, only needed for multimodal
+        return inputs, modality_sizes, inputs_without_pos
+
+
+class AudioPostprocessor(nn.Module):
+    """Audio postprocessing for Perceiver."""
+
+    def __init__(
+            self,
+            postproc_type: str = 'patches',  # 'conv', 'patches', 'pixels'
+            samples_per_patch: int = 96):
+        super().__init__()
+
+        if postproc_type not in ('patches',):
+            raise ValueError('Invalid postproc_type!')
+        self._samples_per_patch = samples_per_patch
+
+        # Architecture parameters:
+        self._postproc_type = postproc_type
+
+    def __call__(self, inputs: torch.Tensor, *,
+                 is_training: bool,
+                 pos: Optional[torch.Tensor] = None,
+                 modality_sizes: Optional[ModalitySizeT] = None) -> torch.Tensor:
+        out = hk.Linear(self._samples_per_patch)(inputs)
+        return torch.reshape(out, [inputs.shape[0], -1])
+
+
+class IdentityPostprocessor(nn.Module):
+    """Passes through the inputs unchanged."""
+
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, inputs: torch.Tensor, *,
+                pos: Optional[torch.Tensor] = None,
+                modality_sizes: Optional[ModalitySizeT] = None) -> torch.Tensor:
+        return inputs
+
+
+def restructure(modality_sizes: ModalitySizeT,
+                inputs: torch.Tensor) -> Mapping[str, torch.Tensor]:
+    """Partitions a [B, N, C] tensor into tensors for each modality.
+  Args:
+    modality_sizes: dict specifying the size of the modality
+    inputs: input tensor
+  Returns:
+    dict mapping name of modality to its associated tensor.
+  """
+    outputs = {}
+    index = 0
+    # Apply a predictable ordering to the modalities
+    for modality in sorted(modality_sizes.keys()):
+        size = modality_sizes[modality]
+        inp = inputs[:, index:index + size]
+        index += size
+        outputs[modality] = inp
+    return outputs
+
+
+class MultimodalPreprocessor(nn.Module):
+    """Multimodal preprocessing for Perceiver Encoder.
+  Inputs for each modality is preprocessed then padded with trainable position
+  embeddings to have the same number of channels.
+  """
+
+    def __init__(
+            self,
+            modalities: Mapping[str, PreprocessorT],
+            mask_probs: Optional[Mapping[str, float]] = None,
+            min_padding_size: int = 2):
+        """Constructor.
+    Args:
+      modalities: dict mapping modality name to preprocessor
+      mask_probs: dict mapping modality name to masking probability of that
+        modality
+      min_padding_size: the minimum padding size for all modalities.
+        The final output will have num_channels equal to the maximum channels
+        across all modalities plus min_padding_size.
+    """
+        super().__init__()
+        self._modalities = modalities
+        self._min_padding_size = min_padding_size
+        self._mask_probs = mask_probs
+
+    def forward(self, inputs: torch.Tensor, *,
+                is_training: bool,
+                pos: Optional[torch.Tensor] = None,
+                network_input_is_1d: bool = True) -> PreprocessorOutputT:
+        outputs = {}
+        inputs_without_pos = {}
+        for modality, preprocessor in self._modalities.items():
+            outputs[modality], _, inputs_without_pos[modality] = preprocessor(
+                inputs[modality], pos=pos,
+                network_input_is_1d=network_input_is_1d)
+
+        common_channel_size = (max(o.shape[2] for o in outputs.values())
+                               + self._min_padding_size)
+
+        padded = {}
+        modality_sizes = {}
+        for modality, output in outputs.items():
+            pos_enc = position_encoding.TrainablePositionEncoding(
+                1, num_channels=common_channel_size - output.shape[2],
+                init_scale=0.02)
+            padding = torch.broadcast_to(
+                pos_enc(batch_size=output.shape[0]),
+                [output.shape[0], output.shape[1],
+                 common_channel_size - output.shape[2]])
+            output_padded = torch.concatenate([output, padding], axis=2)
+
+            if self._mask_probs is not None:
+                # Randomly mask out each token corresponding to this modality
+                mask_token = position_encoding.TrainablePositionEncoding(
+                    1, num_channels=output_padded.shape[2],
+                    init_scale=0.02)(output.shape[0])
+                mask_prob = self._mask_probs[modality]
+
+                mask = torch.bernoulli(mask_prob,
+                                       shape=[output.shape[0], output.shape[1]])
+                mask = torch.unsqueeze(mask, dim=2)
+                output_padded = (1 - mask) * output_padded + mask * mask_token
+
+            padded[modality] = output_padded
+            modality_sizes[modality] = output_padded.shape[1]
+
+        # Apply a predictable ordering to the modalities
+        padded_ls = [padded[k] for k in sorted(padded.keys())]
+        return (torch.concatenate(padded_ls, axis=1),
+                modality_sizes,
+                inputs_without_pos)
+
+
+class MultimodalPostprocessor(nn.Module):
+    """Multimodal postprocessing for Perceiver."""
+
+    def __init__(
+            self,
+            modalities: Mapping[str, PostprocessorT],
+            input_is_dict: bool = False):
+        """Constructor.
+    Args:
+      modalities: dict mapping modality name to post processor for that modality
+      input_is_dict: If True, input is assumed to be dictionary structured,
+        and outputs keep the same dictionary shape. If False, input is a tensor
+        which is sliced up during postprocessing by `modality_sizes`.
+    """
+        super().__init__()
+        self._modalities = modalities
+        self._input_is_dict = input_is_dict
+
+    def forward(
+            self, inputs: torch.Tensor, *,
+            pos: Optional[torch.Tensor] = None,
+            modality_sizes: Optional[ModalitySizeT] = None) -> Mapping[str,
+                                                                       torch.Tensor]:
+        if not self._input_is_dict:
+            # Slice up modalities by their sizes.
+            assert modality_sizes is not None
+            inputs = restructure(modality_sizes=modality_sizes, inputs=inputs)
+        outputs = {modality: postprocessor(
+            inputs[modality], pos=pos, modality_sizes=None)
+            for modality, postprocessor in self._modalities.items()}
+        return outputs
+
 
 class ClassificationPostprocessor(nn.Module):
-  """Classification postprocessing for Perceiver."""
+    """Classification postprocessing for Perceiver."""
 
-  def __init__(
-      self,
-      num_classes: int):
-    super().__init__()
-    self._num_classes = num_classes
+    def __init__(
+            self,
+            num_classes: int):
+        super().__init__()
+        self._num_classes = num_classes
 
-  def forward(self, inputs: torch.Tensor, *,
-               is_training: bool,
-               pos: Optional[torch.Tensor] = None,
-               modality_sizes: Optional[ModalitySizeT] = None) -> torch.Tensor:
-    logits = hk.Linear(self._num_classes)(inputs)
-    return logits[:, 0, :]
+    def forward(self, inputs: torch.Tensor, *,
+                is_training: bool,
+                pos: Optional[torch.Tensor] = None,
+                modality_sizes: Optional[ModalitySizeT] = None) -> torch.Tensor:
+        logits = hk.Linear(self._num_classes)(inputs)
+        return logits[:, 0, :]
 
-#
-# class ProjectionPostprocessor(hk.Module):
-#   """Projection postprocessing for Perceiver."""
-#
-#   def __init__(
-#       self,
-#       num_outputs: int,
-#       name: Optional[str] = None):
-#     super().__init__(name=name)
-#     self._num_outputs = num_outputs
-#
-#   def __call__(self, inputs: jnp.ndarray, *,
-#                is_training: bool,
-#                pos: Optional[jnp.ndarray] = None,
-#                modality_sizes: Optional[ModalitySizeT] = None) -> jnp.ndarray:
-#     logits = hk.Linear(self._num_outputs)(inputs)
-#     return logits
-#
-#
+
+class ProjectionPostprocessor(nn.Module):
+    """Projection postprocessing for Perceiver."""
+
+    def __init__(
+            self,
+            num_inputs: int,
+            num_outputs: int):
+        super().__init__()
+        self._num_outputs = num_outputs
+
+        self.projection = nn.Linear(num_inputs, num_outputs)
+
+        # TODO intialize projection weights
+
+    def forward(self, inputs: torch.Tensor, *,
+                pos: Optional[torch.Tensor] = None,
+                modality_sizes: Optional[ModalitySizeT] = None) -> torch.Tensor:
+        logits = self.projection(inputs)
+        return logits
+
+
 class EmbeddingDecoder(nn.Module):
-  """Pytorech module to decode embeddings."""
+    """Pytorech module to decode embeddings."""
 
-  def __init__(self, embedding: nn.Embedding):
-    """Constructs the module.
+    def __init__(self, embedding: nn.Embedding):
+        """Constructs the module.
     Args:
       embedding: Embedding module to use.
     """
-    super().__init__()
-    self._embedding = embedding
-    self._vocab_size, self._d_model = embedding.weight.shape
-    self.bias = nn.Parameter(torch.zeros(self._vocab_size))
+        super().__init__()
+        self._embedding = embedding
+        self._vocab_size, self._d_model = embedding.weight.shape
+        self.bias = nn.Parameter(torch.zeros(self._vocab_size))
 
-  def forward(self, embeddings: torch.Tensor) -> torch.Tensor:
-    batch_size, seq_len, _ = embeddings.shape
-    output = torch.matmul(
-        embeddings.reshape([-1, self._d_model]),  # Flatten batch dim
-        self._embedding.weight.T)
-    output = output + self.bias
-    return output.reshape([batch_size, seq_len, self._vocab_size])
+    def forward(self, embeddings: torch.Tensor) -> torch.Tensor:
+        batch_size, seq_len, _ = embeddings.shape
+        output = torch.matmul(
+            embeddings.reshape([-1, self._d_model]),  # Flatten batch dim
+            self._embedding.weight.T)
+        output = output + self.bias
+        return output.reshape([batch_size, seq_len, self._vocab_size])
 
-  def set_haiku_params(self, params):
-      with torch.no_grad():
-          self.bias.copy_(torch.from_numpy(params["bias"]).float())
-
-
+    def set_haiku_params(self, params):
+        with torch.no_grad():
+            self.bias.copy_(torch.from_numpy(params["bias"]).float())
