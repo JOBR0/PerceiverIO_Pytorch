@@ -172,7 +172,7 @@ def video_autoencoder(images, audio, subsampling):
                 num_classes=NUM_CLASSES),
         })
 
-    encoder = encoder = perceiver.PerceiverEncoder(
+    encoder = perceiver.PerceiverEncoder(
         num_self_attends_per_block=8,
         # Weights won't be shared if num_blocks is set to 1.
         num_blocks=1,

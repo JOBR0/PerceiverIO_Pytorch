@@ -297,7 +297,13 @@ class BasicDecoder(AbstractPerceiverDecoder):
 
 
 class Perceiver(nn.Module):
-    """The Perceiver: a scalable, fully attentional architecture."""
+    """The Perceiver: a scalable, fully attentional architecture.
+    Args:
+        encoder (PerceiverEncoder): The encoder to use.
+        decoder (AbstractPerceiverDecoder): The decoder to use.
+        input_preprocessor: The input preprocessor to use. Default: None.
+        output_postrocessor: The output preprocessor to use. Default: None.
+    """
 
     def __init__(
             self,
@@ -343,3 +349,120 @@ class Perceiver(nn.Module):
                                                  modality_sizes=output_modality_sizes)
 
         return outputs
+
+
+class BasicVideoAutoencodingDecoder(AbstractPerceiverDecoder):
+  """Cross-attention based video-autoencoding decoder.
+
+  Light-weight wrapper of `BasicDecoder` with video reshaping logic.
+  """
+
+  def __init__(self,
+               output_shape,
+               position_encoding_type,
+               **decoder_kwargs):
+    super().__init__()
+    if len(output_shape) != 4:  # B, T, H, W
+      raise ValueError(f'Expected rank 4 output_shape, got {output_shape}.')
+    # Build the decoder components:
+    self._output_shape = output_shape
+    self._output_num_channels = decoder_kwargs['output_num_channels']
+
+    self.decoder = BasicDecoder(
+        output_index_dims=self._output_shape[1:4],  # T*H*W
+        position_encoding_type=position_encoding_type,
+        **decoder_kwargs)
+
+  def decoder_query(self, inputs, modality_sizes=None,
+                    inputs_without_pos=None, subsampled_points=None):
+    return self.decoder.decoder_query(inputs,
+                                      modality_sizes=modality_sizes,
+                                      inputs_without_pos=inputs_without_pos,
+                                      subsampled_points=subsampled_points)
+
+  def output_shape(self, inputs):
+    return ([inputs.shape[0]] + self._output_shape[1:] +
+            [self._output_num_channels], None)
+
+  def forward(self, query, z, *, is_training, query_mask=None):
+    output = self.decoder(query, z, is_training=is_training)
+
+    output = torch.reshape(output, self._output_shape + [output.shape[-1]])
+    return output
+
+
+class MultimodalDecoder(AbstractPerceiverDecoder):
+  """Multimodal decoding by composing uni-modal decoders.
+
+  The modalities argument of the constructor is a dictionary mapping modality
+  name to the decoder of that modality. That decoder will be used to construct
+  queries for that modality. However, there is a shared cross attention across
+  all modalities, using the concatenated per-modality query vectors.
+  """
+
+  def __init__(self, modalities, num_outputs, output_num_channels,
+               min_padding_size=2,
+               subsampled_index_dims=None,
+               **decoder_kwargs):
+    super().__init__()
+    self._modalities = modalities
+    self._subsampled_index_dims = subsampled_index_dims
+    self._min_padding_size = min_padding_size
+    self._output_num_channels = output_num_channels
+    self._num_outputs = num_outputs
+    self._decoder = BasicDecoder(
+        output_index_dims=(num_outputs,),
+        output_num_channels=output_num_channels,
+        position_encoding_type='none',
+        **decoder_kwargs)
+
+  def decoder_query(self, inputs, modality_sizes, inputs_without_pos=None,
+                    subsampled_points=None):
+    # Partition the flat inputs among the different modalities
+    inputs = io_processors.restructure(modality_sizes, inputs)
+    # Obtain modality-specific decoders' queries
+    subsampled_points = subsampled_points or dict()
+    decoder_queries = dict()
+    for modality, decoder in self._modalities.items():
+      # Get input_without_pos for this modality if it exists.
+      input_without_pos = None
+      if inputs_without_pos is not None:
+        input_without_pos = inputs_without_pos.get(modality, None)
+      decoder_queries[modality] = decoder.decoder_query(
+          inputs=inputs[modality],
+          modality_sizes=None,
+          inputs_without_pos=input_without_pos,
+          subsampled_points=subsampled_points.get(modality, None)
+      )
+
+    # Pad all queries with trainable position encodings to make them
+    # have the same channels
+    num_channels = (max(query.shape[2] for query in decoder_queries.values())
+                    + self._min_padding_size)
+
+    def embed(modality, x):
+      x = jnp.reshape(x, [x.shape[0], np.prod(x.shape[1:-1]), x.shape[-1]])
+      pos = position_encoding.TrainablePositionEncoding(
+          1, num_channels=num_channels - x.shape[2],
+          init_scale=0.02, name=f'{modality}_padding')(x.shape[0])
+      pos = jnp.broadcast_to(
+          pos, [x.shape[0], x.shape[1], num_channels - x.shape[2]])
+      return jnp.concatenate([x, pos], axis=2)
+
+    # Apply a predictable ordering to the modalities
+    return jnp.concatenate([
+        embed(modality, decoder_queries[modality])
+        for modality in sorted(self._modalities.keys())
+    ], axis=1)
+
+  def output_shape(self, inputs):
+    if self._subsampled_index_dims is not None:
+      subsampled_index_dims = sum(self._subsampled_index_dims.values())
+    else:
+      subsampled_index_dims = self._num_outputs
+    return ((inputs.shape[0], subsampled_index_dims, self._output_num_channels),
+            self._subsampled_index_dims)
+
+  def forward(self, query, z, *, is_training, query_mask=None):
+    # B x 1 x num_classes -> B x num_classes
+    return self._decoder(query, z)
