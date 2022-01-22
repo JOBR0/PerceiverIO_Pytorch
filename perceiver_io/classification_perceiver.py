@@ -1,4 +1,3 @@
-import itertools
 import pickle
 import warnings
 from typing import Sequence
@@ -8,34 +7,72 @@ import torch
 
 from perceiver_io.perceiver import PerceiverEncoder, Perceiver
 from perceiver_io import io_processors
-from timm.models.layers import to_2tuple
-
-import torch.nn.functional as F
-from torch.cuda.amp import autocast
 
 from perceiver_io.perceiver import AbstractPerceiverDecoder, BasicDecoder
 
 
 class ClassificationPerceiver(nn.Module):
+    """
+    ClassificationPerceiver: Perceiver for image classification
+    Args:
+        num_classes (int): Number of classes. Default 1000.
+        img_size (Sequence[int]: Size of images [H, W]. Default (224, 224).
+        prep_type (str): Preprocessing type. Default "conv_preprocessing".
+    """
 
-    def __init__(self, num_classes: int = 1000, img_size: Sequence[int] = (224, 224)):
+    def __init__(self,
+                 num_classes: int = 1000,
+                 img_size: Sequence[int] = (224, 224),
+                 prep_type: str = "conv_preprocessing"):
         super().__init__()
-        channels = 3
 
-        input_preprocessor = io_processors.ImagePreprocessor(
-            # TODO check input_shape
-            input_shape=list(img_size) + [channels],
-            position_encoding_type='fourier',
-            fourier_position_encoding_kwargs=dict(
-                concat_pos=True,
-                max_resolution=(56, 56),
-                num_bands=64,
-                sine_only=False
-            ),
-            prep_type='conv')
+        img_channels = 3
+
+        if prep_type == "conv_preprocessing":
+            input_preprocessor = io_processors.ImagePreprocessor(
+                input_shape=list(img_size) + [img_channels],
+                position_encoding_type='fourier',
+                fourier_position_encoding_kwargs=dict(
+                    concat_pos=True,
+                    max_resolution=(56, 56),
+                    num_bands=64,
+                    sine_only=False
+                ),
+                prep_type='conv')
+
+        elif prep_type == "learned_pos_encoding":
+            input_preprocessor = io_processors.ImagePreprocessor(
+                input_shape=list(img_size) + [img_channels],
+                position_encoding_type='trainable',
+                trainable_position_encoding_kwargs=dict(
+                    init_scale=0.02,
+                    num_channels=256,
+                ),
+                prep_type='conv1x1',
+                project_pos_dim=256,
+                num_channels=256,
+                spatial_downsample=1,
+                concat_or_add_pos='concat',
+            )
+
+        elif prep_type == "fourier_pos_encoding":
+            input_preprocessor = io_processors.ImagePreprocessor(
+                input_shape=list(img_size) + [img_channels],
+                position_encoding_type='fourier',
+                fourier_position_encoding_kwargs=dict(
+                    concat_pos=True,
+                    max_resolution=(224, 224),
+                    num_bands=64,
+                    sine_only=False
+                ),
+                prep_type='pixels',
+                spatial_downsample=1,
+            )
+        else:
+            raise ValueError(f"Unknown prep_type type: {prep_type}")
 
         encoder = PerceiverEncoder(
-            num_input_channels=input_preprocessor.output_channels,
+            num_input_channels=input_preprocessor.n_output_channels(),
             cross_attend_widening_factor=1,
             cross_attention_shape_for_attn='kv',
             dropout_prob=0,
@@ -49,8 +86,10 @@ class ClassificationPerceiver(nn.Module):
             z_index_dim=512,
             z_pos_enc_init_scale=0.02)
 
+        decoder_query_residual = False if prep_type == "learned_pos_encoding" else True
+
         decoder = ClassificationDecoder(
-            q_in_channels=1024, # corresponds to num_channels of position encoding
+            q_in_channels=1024,  # corresponds to num_channels of position encoding
             num_classes=num_classes,
             num_z_channels=1024,
             position_encoding_type='trainable',
@@ -58,7 +97,7 @@ class ClassificationPerceiver(nn.Module):
                 init_scale=0.02,
                 num_channels=1024,
             ),
-            use_query_residual=True,
+            use_query_residual=decoder_query_residual,
         )
 
         self.perceiver = Perceiver(
@@ -71,7 +110,6 @@ class ClassificationPerceiver(nn.Module):
         with open(file, "rb") as f:
             dict = pickle.loads(f.read())
             params = dict["params"]
-            #TODO handle state
             state = dict["state"]
             # convert to dict
             state = {key: state[key] for key in state}
@@ -92,7 +130,10 @@ class ClassificationPerceiver(nn.Module):
                 warnings.warn(f"Some parameters couldn't be matched to model: {params.keys()}")
 
     def forward(self, img: torch.Tensor):
-        return self.perceiver(img)
+        """
+        :param img: (batch_size, 3, H, W)
+        """
+        return self.perceiver(img.permute(0, 2, 3, 1))
 
 
 class ClassificationDecoder(AbstractPerceiverDecoder):
@@ -126,11 +167,10 @@ class ClassificationDecoder(AbstractPerceiverDecoder):
         return logits[:, 0, :]
 
     def set_haiku_params(self, params):
-        # TODO where does "~" come from?
-        params = {key[key.find('/')+1:]: params[key] for key in params.keys()}
+        params = {key[key.find('/') + 1:]: params[key] for key in params.keys()}
 
-        basic_decoder_params = {key[key.find('/')+1:]: params.pop(key) for key in list(params.keys()) if
-                            key.startswith("basic_decoder")}
+        basic_decoder_params = {key[key.find('/') + 1:]: params.pop(key) for key in list(params.keys()) if
+                                key.startswith("basic_decoder")}
 
         self.decoder.set_haiku_params(basic_decoder_params)
 
