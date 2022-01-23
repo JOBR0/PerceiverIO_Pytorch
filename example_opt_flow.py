@@ -13,7 +13,7 @@ print("Device:", device)
 
 perceiver = FlowPerceiver(img_size=(368, 496))
 
-ckpt_file = "./pytorch_checkpoints/flow_perceiver_io.pth"
+ckpt_file = "./pytorch_checkpoints/optical_flow_checkpoint.pth"
 
 # check if file exists
 if not os.path.isfile(ckpt_file):
