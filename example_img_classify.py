@@ -5,7 +5,7 @@ import torch
 
 import numpy as np
 
-from perceiver_io.classification_perceiver import ClassificationPerceiver
+from perceiver_io.classification_perceiver import ClassificationPerceiver, PrepType
 from utils.utils import load_image
 
 from torchvision import transforms
@@ -27,10 +27,25 @@ normalize = transforms.Normalize(MEAN_RGB, STDDEV_RGB)
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-perceiver = ClassificationPerceiver(num_classes=1000,
-                                    img_size=img_size)
+prep_type = "fourier_pos_convnet"
 
-ckpt_file = "./pytorch_checkpoints/classify_perceiver_io_conv_preprocessing.pth"
+prep_type = PrepType.FOURIER_POS_CONVNET
+
+# TODO add explantations of prep_type
+
+if prep_type == PrepType.FOURIER_POS_CONVNET:
+    ckpt_file = "./pytorch_checkpoints/imagenet_conv_preprocessing.pth"
+elif prep_type == PrepType.LEARNED_POS_1X1CONV:
+    ckpt_file = "./pytorch_checkpoints/imagenet_learned_position_encoding.pth"
+elif prep_type == PrepType.FOURIER_POS_PIXEL:
+    ckpt_file = "./pytorch_checkpoints/imagenet_fourier_position_encoding.pth"
+
+
+perceiver = ClassificationPerceiver(num_classes=1000,
+                                    img_size=img_size,
+                                    prep_type=prep_type)
+
+
 
 # check if file exists
 if not os.path.isfile(ckpt_file):
@@ -96,7 +111,7 @@ with torch.inference_mode():
     top_preds = torch.topk(logits, 5)[1]
     #top_classes = top_preds[1]
 
-    probs = F.softmax(logits).squeeze()
+    probs = F.softmax(logits, dim=-1).squeeze()
 
     # get top 5 class labels
     top_labels = np.array(IMAGENET_LABELS)[top_preds.cpu().numpy()]
