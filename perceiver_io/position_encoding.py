@@ -173,9 +173,11 @@ class FourierPositionEncoding(AbstractPositionEncoding):
         # Use the index dims as the maximum resolution if it's not provided.
         self._max_resolution = max_resolution or index_dims
 
-        self._output_channels = num_bands * 2 if sine_only else num_bands * 4
+        self._output_channels = num_bands if sine_only else num_bands * 2
+        self._output_channels *= len(self._max_resolution)
+
         if concat_pos:
-            self._output_channels += len(index_dims)
+            self._output_channels += len(self._max_resolution)
 
     def forward(self, batch_size, pos=None):
         pos = _check_or_build_spatial_positions(pos, self._index_dims, batch_size)
