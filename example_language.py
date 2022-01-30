@@ -1,20 +1,27 @@
-from typing import Union
+import os
 
 import torch
 import numpy as np
-import pickle
 
 from perceiver_io.language_perceiver import LanguagePerceiver
 from utils.bytes_tokenizer import BytesTokenizer
 
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
 tokenizer = BytesTokenizer()
 
-model = LanguagePerceiver(vocab_size=tokenizer.vocab_size)
+perceiver = LanguagePerceiver(vocab_size=tokenizer.vocab_size)
 
-model.load_haiku_params("haiku_models/language_perceiver_io_bytes.pickle")
+ckpt_file = "./pytorch_checkpoints/language_perceiver_io_bytes.pth"
 
-D_MODEL = 768
-D_LATENTS = 1280
+# check if file exists
+if not os.path.isfile(ckpt_file):
+    raise ValueError("Please download the model checkpoint and place it in /pytorch_checkpoints")
+
+checkpoint = torch.load(ckpt_file, map_location=device)
+
+perceiver.load_state_dict(checkpoint['model_state_dict'])
+
 MAX_SEQ_LEN = 2048
 
 input_str = "This is an incomplete sentence where some words are missing."
@@ -51,8 +58,10 @@ inputs, input_mask = pad(MAX_SEQ_LEN, inputs, input_mask)
 
 inputs = torch.from_numpy(inputs)
 input_mask = torch.from_numpy(input_mask).bool()
+
+# Predict
 with torch.inference_mode():
-    out = model(inputs, input_masks=input_mask)
+    out = perceiver(inputs, input_masks=input_mask)
 
 masked_tokens_predictions = out[0, 51:60].argmax(axis=-1)
 print("Greedy predictions:")
