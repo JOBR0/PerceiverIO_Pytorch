@@ -12,7 +12,7 @@ import numpy as np
 
 from perceiver import perceiver, io_processors
 
-from imagenet_labels import IMAGENET_LABELS
+from utils.imagenet_labels import IMAGENET_LABELS
 
 # One of learned_position_encoding, fourier_position_encoding, or conv_preprocessing'
 # learned_position_encoding: Uses a learned position encoding over the image
@@ -210,6 +210,8 @@ def resize_and_center_crop(image):
 centered_img = resize_and_center_crop(img)  # img
 logits, _ = imagenet_classifier.apply(params, state, rng, CONFIGS[model_type], normalize(centered_img)[None])
 
+
+print(logits)
 
 _, indices = jax.lax.top_k(logits[0], 5)
 probs = jax.nn.softmax(logits[0])
