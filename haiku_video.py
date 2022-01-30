@@ -269,6 +269,9 @@ video_autoencoder = hk.transform_with_state(video_autoencoder)
 
 
 def autoencode_video(params, state, rng, images, audio):
+    #image shape  = (batch_size, num_frames, img_sz, img_sz, 3)
+    #audio shape  = (batch_size, num_sample, 1)
+
     nchunks = 128
     reconstruction = {}
     for chunk_idx in range(nchunks):
@@ -301,7 +304,7 @@ def autoencode_video(params, state, rng, images, audio):
 
 
 rng = jax.random.PRNGKey(42)
-with open("haiku_models/video_autoencoding_checkpoint.pystate", "rb") as f:
+with open("haiku_checkpoints/video_autoencoding_checkpoint.pystate", "rb") as f:
   params = pickle.loads(f.read())
 
 state = {}
