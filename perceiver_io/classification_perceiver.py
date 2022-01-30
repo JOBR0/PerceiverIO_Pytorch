@@ -1,5 +1,6 @@
 import pickle
 import warnings
+from enum import Enum
 from typing import Sequence
 
 import torch.nn as nn
@@ -11,26 +12,33 @@ from perceiver_io import io_processors
 from perceiver_io.perceiver import AbstractPerceiverDecoder, BasicDecoder
 
 
+class PrepType(Enum):
+    FOURIER_POS_CONVNET = 1
+    LEARNED_POS_1X1CONV = 2
+    FOURIER_POS_PIXEL = 3
+
+
 class ClassificationPerceiver(nn.Module):
     """
     ClassificationPerceiver: Perceiver for image classification
     Args:
         num_classes (int): Number of classes. Default 1000.
         img_size (Sequence[int]: Size of images [H, W]. Default (224, 224).
-        prep_type (str): Preprocessing type. Default "conv_preprocessing".
+        prep_type (str): Preprocessing type. Default "fourier_pos_convnet".
     """
 
     def __init__(self,
                  num_classes: int = 1000,
                  img_size: Sequence[int] = (224, 224),
-                 prep_type: str = "conv_preprocessing"):
+                 prep_type: PrepType = PrepType.FOURIER_POS_CONVNET):
         super().__init__()
 
         img_channels = 3
 
-        if prep_type == "conv_preprocessing":
+        if prep_type == PrepType.FOURIER_POS_CONVNET:
             input_preprocessor = io_processors.ImagePreprocessor(
-                input_shape=list(img_size) + [img_channels],
+                img_size=img_size,
+                input_channels=img_channels,
                 position_encoding_type='fourier',
                 fourier_position_encoding_kwargs=dict(
                     concat_pos=True,
@@ -40,9 +48,10 @@ class ClassificationPerceiver(nn.Module):
                 ),
                 prep_type='conv')
 
-        elif prep_type == "learned_pos_encoding":
+        elif prep_type == PrepType.LEARNED_POS_1X1CONV:
             input_preprocessor = io_processors.ImagePreprocessor(
-                input_shape=list(img_size) + [img_channels],
+                img_size=img_size,
+                input_channels=img_channels,
                 position_encoding_type='trainable',
                 trainable_position_encoding_kwargs=dict(
                     init_scale=0.02,
@@ -55,9 +64,10 @@ class ClassificationPerceiver(nn.Module):
                 concat_or_add_pos='concat',
             )
 
-        elif prep_type == "fourier_pos_encoding":
+        elif prep_type == PrepType.FOURIER_POS_PIXEL:
             input_preprocessor = io_processors.ImagePreprocessor(
-                input_shape=list(img_size) + [img_channels],
+                img_size=img_size,
+                input_channels=img_channels,
                 position_encoding_type='fourier',
                 fourier_position_encoding_kwargs=dict(
                     concat_pos=True,
@@ -80,18 +90,17 @@ class ClassificationPerceiver(nn.Module):
             num_cross_attend_heads=1,
             num_self_attend_heads=8,
             num_self_attends_per_block=6,
-            num_z_channels=1024,
+            num_latent_channels=1024,
             self_attend_widening_factor=1,
             use_query_residual=True,
-            z_index_dim=512,
-            z_pos_enc_init_scale=0.02)
+            num_latents=512,
+            latent_pos_enc_init_scale=0.02)
 
         decoder_query_residual = False if prep_type == "learned_pos_encoding" else True
 
         decoder = ClassificationDecoder(
-            q_in_channels=1024,  # corresponds to num_channels of position encoding
             num_classes=num_classes,
-            num_z_channels=1024,
+            num_latent_channels=1024,
             position_encoding_type='trainable',
             trainable_position_encoding_kwargs=dict(
                 init_scale=0.02,
@@ -143,11 +152,14 @@ class ClassificationDecoder(AbstractPerceiverDecoder):
 
     def __init__(self,
                  num_classes: int,
+                 query_channels: int = None,
                  **decoder_kwargs):
         super().__init__()
 
+
         self._num_classes = num_classes
         self.decoder = BasicDecoder(
+            query_channels=query_channels,
             output_index_dims=(1,),  # Predict a single logit array.
             output_num_channels=num_classes,
             **decoder_kwargs)
@@ -157,6 +169,10 @@ class ClassificationDecoder(AbstractPerceiverDecoder):
         return self.decoder.decoder_query(inputs, modality_sizes,
                                           inputs_without_pos,
                                           subsampled_points=subsampled_points)
+
+    def n_query_channels(self):
+        return self.decoder.n_query_channels()
+
 
     def output_shape(self, inputs):
         return (inputs.shape[0], self._num_classes), None

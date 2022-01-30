@@ -30,6 +30,7 @@ class FlowPerceiver(nn.Module):
             img_size: Sequence[int] = (368, 496),
             flow_scale_factor: int = 20,
             n_latents: int = 2048,
+            num_latent_channels=512,
             n_self_attends: int = 24,
             mixed_precision: bool = False):
         super().__init__()
@@ -42,7 +43,8 @@ class FlowPerceiver(nn.Module):
         preprocessor_channels = 64
 
         input_preprocessor = io_processors.ImagePreprocessor(
-            input_shape=list(img_size) + [channels * patch_size ** 2],
+            img_size=img_size,
+            input_channels=channels * patch_size ** 2,
             position_encoding_type='fourier',
             fourier_position_encoding_kwargs=dict(
                 num_bands=64,
@@ -58,27 +60,26 @@ class FlowPerceiver(nn.Module):
             num_channels=preprocessor_channels)
 
         encoder_input_channels = input_preprocessor.n_output_channels()
-        num_z_channels = 512
 
         encoder = PerceiverEncoder(
             num_input_channels=encoder_input_channels,
             num_self_attends_per_block=n_self_attends,
             # Weights won't be shared if num_blocks is set to 1.
             num_blocks=1,
-            z_index_dim=n_latents,
+            num_latents=n_latents,
             num_cross_attend_heads=1,
-            num_z_channels=num_z_channels,
+            num_latent_channels=num_latent_channels,
             num_self_attend_heads=16,
             cross_attend_widening_factor=1,
             self_attend_widening_factor=1,
             dropout_prob=0.0,
-            z_pos_enc_init_scale=0.02,
+            latent_pos_enc_init_scale=0.02,
             cross_attention_shape_for_attn='kv')
 
         decoder = FlowDecoder(
-            q_in_channels=encoder_input_channels,
-            num_z_channels=num_z_channels,
-            output_image_shape=img_size,
+            query_channels=encoder_input_channels,
+            num_latent_channels=num_latent_channels,
+            output_img_size=img_size,
             rescale_factor=100.0,
             use_query_residual=False,
             output_num_channels=2,
@@ -192,7 +193,7 @@ class FlowPerceiver(nn.Module):
                 flow_piece = self._predict_patch(inp_piece)
 
                 # weights should give more weight to flow from center of patches
-                weights_y, weights_x = torch.meshgrid(torch.arange(self.H), torch.arange(self.W))
+                weights_y, weights_x = torch.meshgrid(torch.arange(self.H), torch.arange(self.W), indexing="ij")
                 weights_x = torch.minimum(weights_x + 1, self.W - weights_x)
                 weights_y = torch.minimum(weights_y + 1, self.H - weights_y)
                 weights = torch.minimum(weights_x, weights_y)[None, None, :, :]
@@ -217,28 +218,31 @@ class FlowPerceiver(nn.Module):
 class FlowDecoder(AbstractPerceiverDecoder):
     """Cross-attention based flow decoder.
     Args:
-        q_in_channels (int)
-        num_z_channels: (int): Number of channels in the latent representation.
-        output_image_shape
-        output_num_channels (int): Number of channels in output. Default: 2
+        query_channels (int): Number of channels in the query for cross-attention. This should correspond to
+            the number of encoder input channels if the same input is used for both encoder and decoder.
+        num_latent_channels: (int): Number of channels in the latent representation.
+        output_img_size (Sequence[int]): Size of the output image.
+        output_num_channels (int): Number of channels in output. Default: 2 (for flow)
         rescale_factor (float): Default: 100.0
         """
 
     def __init__(self,
-                 q_in_channels: int,
-                 num_z_channels: int,
-                 output_image_shape,
+                 query_channels: int,
+                 num_latent_channels: int,
+                 output_img_size: Sequence[int],
                  output_num_channels: int = 2,
                  rescale_factor: float = 100.0,
                  **decoder_kwargs):
         super().__init__()
 
-        self._output_image_shape = output_image_shape
+        self.query_channels = query_channels
+
+        self._output_image_shape = output_img_size
         self._output_num_channels = output_num_channels
         self._rescale_factor = rescale_factor
         self.decoder = BasicDecoder(
-            num_z_channels=num_z_channels,
-            q_in_channels=q_in_channels,
+            num_latent_channels=num_latent_channels,
+            query_channels=query_channels,
             output_num_channels=output_num_channels,
             **decoder_kwargs)
 
@@ -248,15 +252,18 @@ class FlowDecoder(AbstractPerceiverDecoder):
         return ((inputs.shape[0],) + tuple(self._output_image_shape) + (
             self._output_num_channels,), None)
 
+    def n_query_channels(self):
+        return self.query_channels
+
     def decoder_query(self, inputs, modality_sizes=None, inputs_without_pos=None, subsampled_points=None):
         if subsampled_points is not None:
             raise ValueError("FlowDecoder doesn't support subsampling yet.")
         # assumes merged in time
         return inputs
 
-    def forward(self, query, z, *, query_mask=None):
+    def forward(self, query, latents, *, query_mask=None):
         # Output flow and rescale.
-        preds = self.decoder(query, z)
+        preds = self.decoder(query, latents)
         preds /= self._rescale_factor
 
         return preds.reshape([preds.shape[0]] + list(self._output_image_shape) +
