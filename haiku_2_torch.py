@@ -5,6 +5,7 @@ import torch
 from perceiver_io.language_perceiver import LanguagePerceiver
 from perceiver_io.flow_perceiver import FlowPerceiver
 from perceiver_io.classification_perceiver import ClassificationPerceiver, PrepType
+from perceiver_io.video_perceiver import MultiModalPerceiver
 
 print("Language")
 model = LanguagePerceiver()
@@ -66,5 +67,20 @@ state_dicts = {
     "model_state_dict": model.state_dict()
 }
 torch.save(state_dicts, os.path.join("pytorch_checkpoints", model_name))
+
+print("Multimodal")
+
+model = MultiModalPerceiver()
+haiku_file = "haiku_checkpoints/video_autoencoding_checkpoint.pystate"
+model.load_haiku_params(haiku_file)
+
+model_name = "video_autoencoding_checkpoint.pth"
+
+state_dicts = {
+    "model_state_dict": model.state_dict()
+}
+torch.save(state_dicts, os.path.join("pytorch_checkpoints", model_name))
+
+
 
 
