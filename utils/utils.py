@@ -4,12 +4,26 @@ from typing import Union, Sequence
 import torch
 from PIL import Image
 import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.animation import ArtistAnimation
 
 
 def load_image(imfile, device):
     img = np.array(Image.open(imfile)).astype(np.uint8)
     img = torch.from_numpy(img).permute(2, 0, 1).float()
     return img[None].to(device)
+
+def show_animation(images: np.ndarray, fps: int = 30):
+    interval = 1000 / fps
+
+    frames = []  # for storing the generated images
+    fig = plt.figure()
+    for i in range(images.shape[0]):
+        frames.append([plt.imshow(images[i], animated=True)])
+
+    ani = ArtistAnimation(fig, frames, interval=interval, blit=True,
+                                    repeat_delay=1000)
+    plt.show()
 
 
 def same_padding(input_size: Sequence[int], kernel_size: Union[int, Sequence[int]],
