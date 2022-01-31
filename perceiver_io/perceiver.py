@@ -354,8 +354,17 @@ class Perceiver(nn.Module):
 
         # Run the network forward:
         latents = self._encoder(inputs, encoder_query, input_mask=input_mask)
-        _, output_modality_sizes = self._decoder.output_shape(inputs)
-        output_modality_sizes = output_modality_sizes or modality_sizes
+        #_, output_modality_sizes = self._decoder.output_shape(inputs)
+        #output_modality_sizes = output_modality_sizes or modality_sizes
+
+        # TODO adapt for single modality
+        output_modality_sizes = {}
+        if subsampled_output_points is not None:
+            for modality in subsampled_output_points.keys():
+                if subsampled_output_points[modality] is not None:
+                    output_modality_sizes[modality] = subsampled_output_points[modality].shape[0]
+                else:
+                    output_modality_sizes[modality] = modality_sizes[modality]
 
         outputs = self._decoder(decoder_query, latents, query_mask=query_mask)
 
