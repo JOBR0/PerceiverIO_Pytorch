@@ -22,6 +22,7 @@ from perceiver import perceiver, io_processors
 
 # Utilities to fetch videos from UCF101 dataset
 from utils.kinetics_700_classes import KINETICS_CLASSES
+from utils.utils import show_animation
 
 UCF_ROOT = 'https://www.crcv.ucf.edu/THUMOS14/UCF101/UCF101/'
 _VIDEO_LIST = None
@@ -107,8 +108,6 @@ def table(elements):
 video_names = list_ucf_videos()
 video_path = fetch_ucf_video(video_names[0])
 
-# Extract audio using FFMPEG and encode as pcm float wavfile (only format readable by scipy.io.wavfile).
-#!yes | ffmpeg -i "$video_path"  -c copy  -f wav -map 0:a pcm_f32le -ar 48000 output.wav
 
 sample_rate, audio = scipy.io.wavfile.read("output.wav")
 if audio.dtype == np.int16:
@@ -118,8 +117,8 @@ elif audio.dtype != np.float32:
 
 video = load_video(video_path)
 
-# Visualize inputs
-table([to_gif(video), play_audio(audio)])
+show_animation(video)
+
 
 # @title Model construction
 NUM_FRAMES = 16
@@ -313,7 +312,9 @@ state = {}
 reconstruction = autoencode_video(params, state, rng, video[None, :16], audio[None, :16*AUDIO_SAMPLES_PER_FRAME, 0:1])
 
 # Visualize reconstruction of first 16 frames
-table([to_gif(reconstruction["image"][0]), play_audio(np.array(reconstruction["audio"][0]))])
+show_animation(reconstruction["image"][0])
+
+
 
 # Kinetics 700 Labels
 scores, indices = jax.lax.top_k(jax.nn.softmax(reconstruction["label"]), 5)

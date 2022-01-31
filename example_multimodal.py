@@ -29,6 +29,9 @@ from utils.kinetics_700_classes import KINETICS_CLASSES
 
 
 # Utilities to open video files using CV2
+from utils.utils import show_animation
+
+
 def crop_center_square(frame):
     y, x = frame.shape[0:2]
     min_dim = min(y, x)
@@ -73,73 +76,63 @@ def play_audio(data, sample_rate=48000):
     return HTML('<audio controls src="data:audio/wav;base64,%s"/>' % audio_64)
 
 
-def table(elements):
-    row = ['<td>%s</td>' % el.data for el in elements]
-    return HTML('<table><tr>%s</tr></table>' % ''.join(row))
+
 
 
 sample_rate, audio = scipy.io.wavfile.read("output.wav")
 if audio.dtype == np.int16:
-    audio = audio.astype(np.float32) / 2 ** 15
+  audio = audio.astype(np.float32) / 2**15
 elif audio.dtype != np.float32:
-    raise ValueError('Unexpected datatype. Model expects sound samples to lie in [-1, 1]')
+  raise ValueError('Unexpected datatype. Model expects sound samples to lie in [-1, 1]')
 
 video_path = "./sample_data/video.avi"
 video = load_video(video_path)
 
 # Visualize inputs
-table([to_gif(video), play_audio(audio)])
+#show_animation(video)
+
 
 # @title Model construction
 NUM_FRAMES = 16
 AUDIO_SAMPLES_PER_FRAME = 48000 // 25
 SAMPLES_PER_PATCH = 16
 NUM_CLASSES = 700
-IMG_SZ = 56
+IMG_SZ = 224
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print(f"Device: {device}")
 
-perceiver = MultiModalPerceiver()
-
+perceiver = MultiModalPerceiver(
+    num_frames=NUM_FRAMES,
+    audio_samples_per_frame=AUDIO_SAMPLES_PER_FRAME,
+    audio_samples_per_patch=SAMPLES_PER_PATCH,
+    num_classes=NUM_CLASSES,
+    img_size=(IMG_SZ, IMG_SZ),
+)
 perceiver.eval()
+perceiver.to(device)
+
+ckpt_file = "./pytorch_checkpoints/video_autoencoding_checkpoint.pth"
+
+# check if file exists
+if not os.path.isfile(ckpt_file):
+    raise ValueError("Please download the model checkpoint and place it in /pytorch_checkpoints")
+
+checkpoint = torch.load(ckpt_file, map_location=device)
+
+perceiver.load_state_dict(checkpoint['model_state_dict'])
 
 
-def autoencode_video(images, audio):
-    nchunks = 128
-    reconstruction = {}
-    for chunk_idx in range(nchunks):
-        image_chunk_size = np.prod(images.shape[1:-1]) // nchunks
-        audio_chunk_size = audio.shape[1] // SAMPLES_PER_PATCH // nchunks
-        subsampling = {
-            'image': jnp.arange(
-                image_chunk_size * chunk_idx, image_chunk_size * (chunk_idx + 1)),
-            'audio': jnp.arange(
-                audio_chunk_size * chunk_idx, audio_chunk_size * (chunk_idx + 1)),
-            'label': None,
-        }
-        output = perceiver(images, audio, subsampling)
 
-        reconstruction['label'] = output['label']
-        if 'image' not in reconstruction:
-            reconstruction['image'] = output['image']
-            reconstruction['audio'] = output['audio']
-        else:
-            reconstruction['image'] = jnp.concatenate(
-                [reconstruction['image'], output['image']], axis=1)
-            reconstruction['audio'] = jnp.concatenate(
-                [reconstruction['audio'], output['audio']], axis=1)
 
-    reconstruction['image'] = jnp.reshape(reconstruction['image'], images.shape)
-    reconstruction['audio'] = jnp.reshape(reconstruction['audio'], audio.shape)
-    return reconstruction
-
+video_input = torch.from_numpy(video[None, :16]).float().to(device)
+audio_input = torch.from_numpy(audio[None, :16 * AUDIO_SAMPLES_PER_FRAME, 0:1]).float().to(device)
 
 # Auto-encode the first 16 frames of the video and one of the audio channels
-reconstruction = autoencode_video(video[None, :16], audio[None, :16 * AUDIO_SAMPLES_PER_FRAME, 0:1])
+reconstruction = perceiver(video_input, audio_input)
 
 # Visualize reconstruction of first 16 frames
-table([to_gif(reconstruction["image"][0]), play_audio(np.array(reconstruction["audio"][0]))])
+show_animation(reconstruction["image"][0])
 
 # Kinetics 700 Labels
 scores, indices = jax.lax.top_k(jax.nn.softmax(reconstruction["label"]), 5)
