@@ -8,7 +8,7 @@ import torch
 import numpy as np
 
 from perceiver_io.classification_perceiver import ClassificationDecoder
-from perceiver_io.perceiver import PerceiverEncoder, Perceiver, AbstractPerceiverDecoder, BasicDecoder, \
+from perceiver_io.perceiver import PerceiverEncoder, Perceiver, BasicDecoder, \
     BasicVideoAutoencodingDecoder, MultimodalDecoder
 from perceiver_io import io_processors
 
@@ -16,7 +16,7 @@ from perceiver_io import io_processors
 
 class MultiModalPerceiver(nn.Module):
     """
-    MultiModalPerceiver: Perceiver for video data.
+    MultiModalPerceiver: Perceiver for autoencoding video data.
     """
 
     def __init__(

@@ -18,7 +18,7 @@ import scipy.io.wavfile
 
 import torch
 
-from perceiver_io.video_perceiver import MultiModalPerceiver
+from perceiver_io.multimodal_perceiver import MultiModalPerceiver
 
 from IPython.display import HTML
 

@@ -5,7 +5,7 @@ import torch
 from perceiver_io.language_perceiver import LanguagePerceiver
 from perceiver_io.flow_perceiver import FlowPerceiver
 from perceiver_io.classification_perceiver import ClassificationPerceiver, PrepType
-from perceiver_io.video_perceiver import MultiModalPerceiver
+from perceiver_io.multimodal_perceiver import MultiModalPerceiver
 
 print("Language")
 model = LanguagePerceiver()
