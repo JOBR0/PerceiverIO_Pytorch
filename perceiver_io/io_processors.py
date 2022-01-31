@@ -271,8 +271,7 @@ class Conv2DUpsample(nn.Module):
             name='transp_conv_2')
 
     def forward(self, inputs: torch.Tensor, *,
-                is_training: bool,
-                test_local_stats: bool = False) -> torch.Tensor:
+                test_local_stats: bool = False) -> torch.Tensor: #TODO what is test_local_stats?
         out = inputs
         out = self.transp_conv1(out)
         out = F.relu(out)
@@ -295,7 +294,7 @@ class Conv3DUpsample(nn.Module):
         self._n_time_upsamples = n_time_upsamples
         self._n_space_upsamples = n_space_upsamples
 
-    def forward(self, x: torch.Tensor, *, is_training: bool) -> torch.Tensor:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         n_upsamples = max(self._n_time_upsamples, self._n_space_upsamples)
 
         time_stride = 2
@@ -332,6 +331,7 @@ class ImagePreprocessor(nn.Module):
     def __init__(
             self,
             img_size: Sequence[int],
+            num_frames: int = 1,
             input_channels: int = 3,
             prep_type: str = 'conv',
             spatial_downsample: int = 4,
@@ -386,7 +386,10 @@ class ImagePreprocessor(nn.Module):
             trunc_normal_(self.convnet_1x1.weight, mean=0.0, std=0.01)
             nn.init.constant_(self.convnet_1x1.bias, 0)
 
+        # Dimensions that are indexed by postion encoding
         self.index_dims = [d // spatial_downsample for d in img_size]
+        if num_frames > 1:
+            self.index_dims = [num_frames // temporal_downsample] + self.index_dims
 
         self._positional_encoding = position_encoding.build_position_encoding(
             position_encoding_type=position_encoding_type,
@@ -410,7 +413,7 @@ class ImagePreprocessor(nn.Module):
             if conv_after_patching:
                 self.output_channels = num_channels
             else:
-                self.output_channels = input_channels * spatial_downsample**2 * temporal_downsample
+                self.output_channels = input_channels * spatial_downsample ** 2 * temporal_downsample
         else:
             self.output_channels = num_channels
 
@@ -656,7 +659,6 @@ class AudioPreprocessor(nn.Module):
 
     def __init__(
             self,
-            input_channels: int,
             samples_per_batch: int,
             prep_type: str = 'patches',
             samples_per_patch: int = 96,
@@ -677,7 +679,7 @@ class AudioPreprocessor(nn.Module):
         self._concat_or_add_pos = concat_or_add_pos
 
         # TODO check
-        self.index_dims = [samples_per_batch]
+        self.index_dims = [samples_per_batch // samples_per_patch]
 
         self._positional_encoding = position_encoding.build_position_encoding(
             index_dims=self.index_dims,
@@ -720,7 +722,7 @@ class AudioPreprocessor(nn.Module):
                 pos_enc = F.relu(pos_enc)
 
         if self._concat_or_add_pos == 'concat':
-            inputs_with_pos = torch.concatenate([inputs, pos_enc], axis=-1)
+            inputs_with_pos = torch.cat([inputs, pos_enc], dim=-1)
         elif self._concat_or_add_pos == 'add':
             inputs_with_pos = inputs + pos_enc
 
@@ -757,7 +759,6 @@ class AudioPostprocessor(nn.Module):
         # TODO: initalize weights
 
     def forward(self, inputs: torch.Tensor, *,
-                is_training: bool,
                 pos: Optional[torch.Tensor] = None,
                 modality_sizes: Optional[ModalitySizeT] = None) -> torch.Tensor:
         out = self.linear(inputs)
@@ -866,15 +867,14 @@ class MultimodalPreprocessor(nn.Module):
                 pos_enc,
                 [output.shape[0], output.shape[1],
                  self._output_channels - output.shape[2]])
-            output_padded = torch.concatenate([output, padding], axis=2)
+            output_padded = torch.cat([output, padding], dim=2)
 
             if self._mask_probs is not None:
                 # Randomly mask out each token corresponding to this modality
                 mask_token = self.mask_tokens[modality](output.shape[0])
                 mask_prob = self._mask_probs[modality]
 
-                mask = torch.bernoulli(mask_prob,
-                                       shape=[output.shape[0], output.shape[1]])
+                mask = torch.bernoulli(torch.full([output.shape[0], output.shape[1]], fill_value=mask_prob))
                 mask = torch.unsqueeze(mask, dim=2)
                 output_padded = (1 - mask) * output_padded + mask * mask_token
 
@@ -883,7 +883,7 @@ class MultimodalPreprocessor(nn.Module):
 
         # Apply a predictable ordering to the modalities
         padded_ls = [padded[k] for k in sorted(padded.keys())]
-        return (torch.concatenate(padded_ls, axis=1),
+        return (torch.cat(padded_ls, dim=1),
                 modality_sizes,
                 inputs_without_pos)
 

@@ -1,13 +1,14 @@
 import abc
 import warnings
 
+import numpy as np
 import torch
 import torch.nn as nn
 from timm.models.layers import lecun_normal_
 
 from perceiver_io import position_encoding, io_processors
 from perceiver_io.transformer_primitives import CrossAttention, SelfAttention, make_cross_attention_mask
-from utils.utils import init_linear_from_haiku
+from utils.utils import init_linear_from_haiku, unravel_index
 
 
 class AbstractPerceiverDecoder(nn.Module, metaclass=abc.ABCMeta):
@@ -23,7 +24,7 @@ class AbstractPerceiverDecoder(nn.Module, metaclass=abc.ABCMeta):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def forward(self, query, latents, *, is_training, query_mask=None):
+    def forward(self, query, latents, *, query_mask=None):
         raise NotImplementedError
 
 
@@ -252,7 +253,9 @@ class BasicDecoder(AbstractPerceiverDecoder):
         if subsampled_points is not None:
             # unravel_index returns a tuple (x_idx, y_idx, ...)
             # stack to get the [n, d] tensor of coordinates
-            pos = torch.stack(torch.unravel_index(subsampled_points, self._output_index_dim), dim=1)
+            #pos = torch.stack(torch.unravel_index(subsampled_points, self._output_index_dim), dim=1)
+
+            pos = unravel_index(subsampled_points, self._output_index_dim)
             # Map these coordinates to [-1, 1]
             pos = -1 + 2 * pos / torch.tensor(self._output_index_dim)[None, :]
             pos = torch.broadcast_to(pos[None],
@@ -399,8 +402,8 @@ class BasicVideoAutoencodingDecoder(AbstractPerceiverDecoder):
         return ([inputs.shape[0]] + self._output_shape[1:] +
                 [self._output_num_channels], None)
 
-    def forward(self, query, latents, *, is_training, query_mask=None):
-        output = self.decoder(query, latents, is_training=is_training)
+    def forward(self, query, latents, *, query_mask=None):
+        output = self.decoder(query, latents)
 
         output = torch.reshape(output, self._output_shape + [output.shape[-1]])
         return output
@@ -469,7 +472,7 @@ class MultimodalDecoder(AbstractPerceiverDecoder):
             )
 
             # x = torch.reshape(x, [x.shape[0], torch.prod(x.shape[1:-1]), x.shape[-1]])
-            query = query.reshape([query.shape[0], torch.prod(query.shape[1:-1]), query.shape[-1]])
+            query = query.reshape([query.shape[0], np.prod(query.shape[1:-1]), query.shape[-1]])
 
             pos = self.padding_embeddings[modality](query.shape[0])
 
@@ -481,7 +484,7 @@ class MultimodalDecoder(AbstractPerceiverDecoder):
 
         # Apply a predictable ordering to the modalities
         return torch.cat([
-            query[modality]
+            decoder_queries[modality]
             for modality in sorted(self._modalities.keys())
         ], dim=1)
 
@@ -493,7 +496,7 @@ class MultimodalDecoder(AbstractPerceiverDecoder):
         return ((inputs.shape[0], subsampled_index_dims, self._output_num_channels),
                 self._subsampled_index_dims)
 
-    def forward(self, query, latents, *, is_training, query_mask=None):
+    def forward(self, query, latents, *, query_mask=None):
         # B x 1 x num_classes -> B x num_classes
         return self._decoder(query, latents)
 

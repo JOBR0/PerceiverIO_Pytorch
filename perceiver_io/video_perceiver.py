@@ -1,4 +1,3 @@
-import itertools
 import pickle
 import warnings
 from typing import Sequence
@@ -6,14 +5,13 @@ from typing import Sequence
 import torch.nn as nn
 import torch
 
+import numpy as np
+
 from perceiver_io.classification_perceiver import ClassificationDecoder
 from perceiver_io.perceiver import PerceiverEncoder, Perceiver, AbstractPerceiverDecoder, BasicDecoder, \
     BasicVideoAutoencodingDecoder, MultimodalDecoder
 from perceiver_io import io_processors
-from timm.models.layers import to_2tuple
 
-import torch.nn.functional as F
-from torch.cuda.amp import autocast
 
 
 class MultiModalPerceiver(nn.Module):
@@ -23,7 +21,7 @@ class MultiModalPerceiver(nn.Module):
 
     def __init__(
             self,
-            img_size: Sequence[int] = (56, 56),
+            img_size: Sequence[int] = (224, 224),
             img_channels: int = 3,
             num_frames: int = 16,
             num_classes: int = 700,
@@ -39,31 +37,12 @@ class MultiModalPerceiver(nn.Module):
 
         n_audio_samples = num_frames * audio_samples_per_frame
 
-        # subsampled_index_dims = {
-        #     "audio": subsampling["audio"].shape[0],
-        #     "image": subsampling["image"].shape[0],
-        #     "label": 1,
-        # }
-
-        # TODO fix this
-        image_chunk_size =  1000 #np.prod(images.shape[1:-1]) // nchunks
-        audio_chunk_size = 1000 #audio.shape[1] // SAMPLES_PER_PATCH // nchunks
-        chunk_idx = 0
-
-        subsampling = {
-            "image": torch.arange(
-                image_chunk_size * chunk_idx, image_chunk_size * (chunk_idx + 1)),
-            "audio": torch.arange(
-                audio_chunk_size * chunk_idx, audio_chunk_size * (chunk_idx + 1)),
-            "label": None,
-        }
 
         input_preprocessor = io_processors.MultimodalPreprocessor(
             min_padding_size=4,
             modalities={
                 "audio": io_processors.AudioPreprocessor(
-                    input_channels=1,#TODO
-                    samples_per_batch=n_audio_samples,#TODO check
+                    samples_per_batch=n_audio_samples,
                     position_encoding_type="fourier",
                     fourier_position_encoding_kwargs=dict(
                         num_bands=192,
@@ -73,14 +52,15 @@ class MultiModalPerceiver(nn.Module):
                     ),
                     n_extra_pos_mlp=0,
                     prep_type="patches",
-                    samples_per_patch=16),
+                    samples_per_patch=audio_samples_per_patch),
                 "image": io_processors.ImagePreprocessor(
                     img_size=(self.H, self.W),
-                    input_channels=3,
+                    input_channels=img_channels,
+                    num_frames=num_frames,
                     position_encoding_type="fourier",
                     fourier_position_encoding_kwargs=dict(
                         num_bands=32,
-                        max_resolution=(num_frames, self.H, self.W),
+                        max_resolution=(num_frames, self.H//4, self.W//4),
                         sine_only=False,
                         concat_pos=True,
                     ),
@@ -129,7 +109,7 @@ class MultiModalPerceiver(nn.Module):
         image_decoder = BasicVideoAutoencodingDecoder(
             # Autoencoding, don"t pass inputs to the queries.
             concat_preprocessed_input=False,
-            subsampled_index_dims=subsampling["image"],
+            #subsampled_index_dims=subsampling["image"], #TODO needed?
             output_shape=(5, 3, 224, 224), #TODO change#images.shape[:4],
             num_latent_channels=1024,# TODO check why does it differ from encoder
             output_num_channels=512,
@@ -149,14 +129,14 @@ class MultiModalPerceiver(nn.Module):
         decoder = MultimodalDecoder(
             # Autoencoding, don"t pass inputs to the queries.
             concat_preprocessed_input=False,
-            subsampled_index_dims=subsampled_index_dims,
+            # subsampled_index_dims=subsampled_index_dims,# TODO needed?
             # Modality specific decoders are used ONLY to generate queries.
             # All modalties are decoded together using a unified decoder.
             modalities={
                 "audio": BasicDecoder(
                     # Autoencoding, don"t pass inputs to the queries.
                     concat_preprocessed_input=False,
-                    subsampled_index_dims=subsampling["audio"],
+                    #subsampled_index_dims=subsampling["audio"],#TODO needed?
                     output_index_dims=(n_audio_samples // self.audio_samples_per_frame,),
                     num_latent_channels=1024,# TODO check why does it differ from encoder
                     output_num_channels=512,
@@ -243,7 +223,7 @@ class MultiModalPerceiver(nn.Module):
         # TODO check image channel position
         batch_size = images.shape[0]
 
-        image_chunk_size = torch.prod(images.shape[1:-1]) // n_chunks
+        image_chunk_size = np.prod(images.shape[1:-1]).item() // n_chunks
         audio_chunk_size = audio.shape[1] // self.audio_samples_per_frame // n_chunks
         
         reconstruction = {"image": [], "audio": [], "label": None}
@@ -256,7 +236,7 @@ class MultiModalPerceiver(nn.Module):
                     audio_chunk_size * chunk_idx, audio_chunk_size * (chunk_idx + 1)),
                 "label": None,
             }
-            output = self.perceiver({"image": images, "audio": audio, "label": torch.zeros_like((batch_size, self.num_classes))},
+            output = self.perceiver({"image": images, "audio": audio, "label": torch.zeros((batch_size, self.num_classes))},
                                     subsampled_output_points=subsampling)
             
             reconstruction["image"].append(output["image"])
