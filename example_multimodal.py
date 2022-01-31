@@ -128,8 +128,10 @@ perceiver.load_state_dict(checkpoint['model_state_dict'])
 video_input = torch.from_numpy(video[None, :16]).float().to(device)
 audio_input = torch.from_numpy(audio[None, :16 * AUDIO_SAMPLES_PER_FRAME, 0:1]).float().to(device)
 
+
 # Auto-encode the first 16 frames of the video and one of the audio channels
-reconstruction = perceiver(video_input, audio_input)
+with torch.inference_mode():
+    reconstruction = perceiver(video_input, audio_input)
 
 # Visualize reconstruction of first 16 frames
 show_animation(reconstruction["image"][0])

@@ -34,6 +34,7 @@ class MultiModalPerceiver(nn.Module):
         self.H, self.W = img_size
         self.num_classes = num_classes
         self.audio_samples_per_frame = audio_samples_per_frame
+        self.audio_samples_per_patch = audio_samples_per_patch
 
         n_audio_samples = num_frames * audio_samples_per_frame
 
@@ -79,9 +80,9 @@ class MultiModalPerceiver(nn.Module):
             modalities={
                 "audio": io_processors.AudioPostprocessor(
                     in_channels=512,
-                    samples_per_patch=audio_samples_per_frame),
+                    samples_per_patch=audio_samples_per_patch),
                 "image": io_processors.ProjectionPostprocessor(
-                    num_inputs=512,#todo check
+                    num_inputs=512,
                     num_outputs=3),
                 "label": io_processors.ClassificationPostprocessor(
                     num_input_channels=512,#todo check what"s the point of this postprocessor combined with classification decoder
@@ -224,7 +225,7 @@ class MultiModalPerceiver(nn.Module):
         batch_size = images.shape[0]
 
         image_chunk_size = np.prod(images.shape[1:-1]).item() // n_chunks
-        audio_chunk_size = audio.shape[1] // self.audio_samples_per_frame // n_chunks
+        audio_chunk_size = audio.shape[1] // self.audio_samples_per_patch // n_chunks
         
         reconstruction = {"image": [], "audio": [], "label": None}
         
@@ -243,8 +244,8 @@ class MultiModalPerceiver(nn.Module):
             reconstruction["audio"].append(output["audio"])
             reconstruction["label"] = output["label"]
 
-        reconstruction["image"] = torch.cat(reconstruction["image"], dim=1).resize(images.shape)
-        reconstruction["audio"] = torch.cat(reconstruction["audio"], dim=1).resize(audio.shape)
+        reconstruction["image"] = torch.cat(reconstruction["image"], dim=1).reshape(images.shape)
+        reconstruction["audio"] = torch.cat(reconstruction["audio"], dim=1).reshape(audio.shape)
 
         return reconstruction
 
