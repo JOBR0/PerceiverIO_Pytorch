@@ -694,7 +694,8 @@ class AudioPreprocessor(nn.Module):
             for i in range(self._n_extra_pos_mlp):
                 linear = nn.Linear(in_features=self._positional_encoding.n_output_channels(),
                                    out_features=self._positional_encoding.n_output_channels())
-                # TODO init
+                lecun_normal_(linear.weight)
+                nn.init.constant_(linear.bias, 0)
                 self._extra_pos_mlps.append(linear)
 
         self.output_channels = samples_per_patch
@@ -756,7 +757,8 @@ class AudioPostprocessor(nn.Module):
         self._postproc_type = postproc_type
 
         self.linear = nn.Linear(in_features=in_channels, out_features=samples_per_patch)
-        # TODO: initalize weights
+        lecun_normal_(self.linear.weight)
+        nn.init.constant_(self.linear.bias, 0)
 
     def forward(self, inputs: torch.Tensor, *,
                 pos: Optional[torch.Tensor] = None,
@@ -943,7 +945,8 @@ class ClassificationPostprocessor(nn.Module):
         super().__init__()
         self._num_classes = num_classes
         self.linear = nn.Linear(num_input_channels, num_classes)
-        # TODO initialize weights
+        lecun_normal_(self.linear.weight)
+        nn.init.constant_(self.linear.bias, 0)
 
     def forward(self, inputs: torch.Tensor, *,
                 pos: Optional[torch.Tensor] = None,
@@ -968,8 +971,8 @@ class ProjectionPostprocessor(nn.Module):
         self._num_outputs = num_outputs
 
         self.projection = nn.Linear(num_inputs, num_outputs)
-
-        # TODO intialize projection weights
+        lecun_normal_(self.projection.weight)
+        nn.init.constant_(self.projection.bias, 0)
 
     def forward(self, inputs: torch.Tensor, *,
                 pos: Optional[torch.Tensor] = None,
