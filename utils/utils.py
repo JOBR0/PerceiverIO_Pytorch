@@ -1,11 +1,20 @@
 import math
 from typing import Union, Sequence, Tuple
+import pickle
 
 import torch
 from PIL import Image
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import ArtistAnimation
+
+def dump_pickle(obj, file_path):
+    with open(file_path, "wb") as f:
+        pickle.dump(obj, f)
+
+def load_pickle(file_path):
+    with open(file_path, "rb") as f:
+        return pickle.load(f)
 
 
 def load_image(imfile, device):
