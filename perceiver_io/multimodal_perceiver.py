@@ -118,7 +118,7 @@ class MultiModalPerceiver(nn.Module):
             position_encoding_type="fourier",
             fourier_position_encoding_kwargs=dict(
                 num_bands=32,
-                max_resolution=(num_frames, self.H, self.W),
+                max_resolution=(num_frames, self.H//4, self.W//4),
                 sine_only=False,
                 concat_pos=True,
             ),
@@ -138,7 +138,7 @@ class MultiModalPerceiver(nn.Module):
                     # Autoencoding, don"t pass inputs to the queries.
                     concat_preprocessed_input=False,
                     #subsampled_index_dims=subsampling["audio"],#TODO needed?
-                    output_index_dims=(n_audio_samples // self.audio_samples_per_frame,),
+                    output_index_dims=(n_audio_samples // self.audio_samples_per_patch,),
                     num_latent_channels=1024,# TODO check why does it differ from encoder
                     output_num_channels=512,
                     use_query_residual=False,
