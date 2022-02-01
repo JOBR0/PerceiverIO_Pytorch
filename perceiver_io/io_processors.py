@@ -825,6 +825,9 @@ class MultimodalPreprocessor(nn.Module):
         across all modalities plus min_padding_size.
     """
         super().__init__()
+        if type(modalities) is dict:
+            modalities = nn.ModuleDict(modalities)
+
         self._modalities = modalities
         self._min_padding_size = min_padding_size
         self._mask_probs = mask_probs
