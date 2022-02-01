@@ -2,6 +2,7 @@
 .ipynb_checkpoints/
 perceiverEnv/
 perceiver/
+temp/
 playground.py
 __pycache__
 
