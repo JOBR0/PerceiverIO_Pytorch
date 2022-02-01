@@ -435,6 +435,10 @@ class MultimodalDecoder(AbstractPerceiverDecoder):
                  subsampled_index_dims=None,
                  **decoder_kwargs):
         super().__init__()
+
+        if type(modalities) is dict:
+            modalities = nn.ModuleDict(modalities)
+
         self._modalities = modalities
         self._subsampled_index_dims = subsampled_index_dims
         self._min_padding_size = min_padding_size

@@ -920,6 +920,9 @@ class MultimodalPostprocessor(nn.Module):
         which is sliced up during postprocessing by `modality_sizes`.
     """
         super().__init__()
+        if type(modalities) is dict:
+            modalities = nn.ModuleDict(modalities)
+
         self._modalities = modalities
         self._input_is_dict = input_is_dict
 
