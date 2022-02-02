@@ -150,8 +150,12 @@ def _check_or_build_spatial_positions(pos, index_dims, batch_size):
 class FourierPositionEncoding(AbstractPositionEncoding):
     """Fourier (Sinusoidal) position encoding."""
 
-    def __init__(self, index_dims, num_bands, concat_pos=True,
-                 max_resolution=None, sine_only=False):
+    def __init__(self,
+                 index_dims,
+                 num_bands,
+                 concat_pos=True,
+                 max_resolution=None,
+                 sine_only=False):
         super().__init__()
         self._num_bands = num_bands
         self._concat_pos = concat_pos
