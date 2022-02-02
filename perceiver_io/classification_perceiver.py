@@ -113,7 +113,7 @@ class ClassificationPerceiver(nn.Module):
             input_preprocessors=input_preprocessor,
             encoder=encoder,
             decoder=decoder,
-            output_postprocessor=None)
+            output_postprocessors=None)
 
     def load_haiku_params(self, file):
         with open(file, "rb") as f:
@@ -133,7 +133,7 @@ class ClassificationPerceiver(nn.Module):
                                    key.startswith("image_preprocessor")}
             preprocessor_state = {key[key.find('/') + 1:]: state.pop(key) for key in list(state.keys()) if
                                   key.startswith("image_preprocessor")}
-            self.perceiver._input_preprocessor.set_haiku_params(preprocessor_params, preprocessor_state)
+            self.perceiver._multi_preprocessor._preprocessors["default"].set_haiku_params(preprocessor_params, preprocessor_state)
 
             if len(params) != 0:
                 warnings.warn(f"Some parameters couldn't be matched to model: {params.keys()}")

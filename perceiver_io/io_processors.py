@@ -271,7 +271,7 @@ class Conv2DUpsample(nn.Module):
             name='transp_conv_2')
 
     def forward(self, inputs: torch.Tensor, *,
-                test_local_stats: bool = False) -> torch.Tensor: #TODO what is test_local_stats?
+                test_local_stats: bool = False) -> torch.Tensor:  # TODO what is test_local_stats?
         out = inputs
         out = self.transp_conv1(out)
         out = F.relu(out)
@@ -508,8 +508,7 @@ class ImagePreprocessor(nn.Module):
 
         inputs, inputs_without_pos = self._build_network_inputs(
             inputs, pos, network_input_is_1d)
-        modality_sizes = None  # Size for each modality, only needed for multimodal
-        return inputs, modality_sizes, inputs_without_pos
+        return inputs, inputs_without_pos
 
     def set_haiku_params(self, params, state=None):
         params = {key[key.find('/') + 1:]: params[key] for key in params.keys()}
@@ -649,9 +648,9 @@ class OneHotPreprocessor(nn.Module):
 
         # TODO whats the point of this?
 
-        # No position encodings, so the 1st (input) and 3rd (inputs_without_pos)
+        # No position encodings, so the 1st (input) and 2nd (inputs_without_pos)
         # outputs are identical.
-        return inputs, None, inputs
+        return inputs, inputs
 
 
 class AudioPreprocessor(nn.Module):
@@ -736,8 +735,7 @@ class AudioPreprocessor(nn.Module):
                                         self._samples_per_patch])
 
         inputs, inputs_without_pos = self._build_network_inputs(inputs, pos)
-        modality_sizes = None  # Size for each modality, only needed for multimodal
-        return inputs, modality_sizes, inputs_without_pos
+        return inputs, inputs_without_pos
 
 
 class AudioPostprocessor(nn.Module):
@@ -784,7 +782,6 @@ class IdentityPostprocessor(nn.Module):
         return inputs
 
 
-
 class MultimodalPreprocessor(nn.Module):
     """Multimodal preprocessing for Perceiver Encoder.
   Inputs for each modality is preprocessed then padded with trainable position
@@ -793,12 +790,13 @@ class MultimodalPreprocessor(nn.Module):
 
     def __init__(
             self,
-            modalities: Mapping[str, PreprocessorT],
+            input_preprocessors: Mapping[str, PreprocessorT] = None,
             mask_probs: Optional[Mapping[str, float]] = None,
-            min_padding_size: int = 2):
+            min_padding_size: int = 2,
+            input_channels: Mapping[str, float] = None):
         """Constructor.
     Args:
-      modalities: dict mapping modality name to preprocessor
+      input_preprocessors: dict mapping modality name to preprocessor
       mask_probs: dict mapping modality name to masking probability of that
         modality
       min_padding_size: the minimum padding size for all modalities.
@@ -806,84 +804,115 @@ class MultimodalPreprocessor(nn.Module):
         across all modalities plus min_padding_size.
     """
         super().__init__()
-        if type(modalities) is dict:
-            modalities = nn.ModuleDict(modalities)
 
-        self._modalities = modalities
+        self._preprocessors = input_preprocessors
         self._min_padding_size = min_padding_size
         self._mask_probs = mask_probs
 
-        self._output_channels = (max(m.n_output_channels() for m in self._modalities.values()) + self._min_padding_size)
+        self._common_channels = None
+
+        if input_preprocessors is not None:
+            assert input_channels is None, "input_channels and modalities are mutually exclusive"
+            input_channels = {modality: p.n_output_channels() for modality, p in self._preprocessors.items()}
+            self._common_channels = (max(input_channels.values()) + self._min_padding_size)
+        elif input_channels is not None:
+            self._common_channels = (max(input_channels.values()) + self._min_padding_size)
+        else:
+            assert mask_probs is None, "Masking requires knowledge of input channels at construction. Either input_preprocessors have to " \
+                                       "be used or input_channels have to be given."
+            assert min_padding_size == 0, "Padding requires knowledge of input channels at construction. Either input_preprocessors have to " \
+                                          "be used or input_channels have to be given."
+
+        #self.input_channels = input_channels
 
         if self._mask_probs is not None:
             self.mask_tokens = nn.ModuleDict()
-            for modality_name, modality in self._modalities.items():
+            for modality_name, modality in self._preprocessors.items():
                 pos = position_encoding.TrainablePositionEncoding(
                     index_dim=1,
-                    num_channels=self._output_channels,
+                    num_channels=self._common_channels,
                     init_scale=0.02)
                 self.mask_tokens[modality_name] = pos
 
-        self.padding_embeddings = nn.ModuleDict()
-        for modality_name, modality in self._modalities.items():
-            pos = position_encoding.TrainablePositionEncoding(
-                index_dim=1,
-                num_channels=self._output_channels - modality.n_output_channels(),
-                init_scale=0.02)
-            self.padding_embeddings[modality_name] = pos
+        self.padding_embeddings = None
+        # No padding if all modalities have the same number of channels and no extra padding is required.
+        if input_channels is not None:
+            if max(input_channels.values()) != min(input_channels.values()) or min_padding_size != 0:
+                self.padding_embeddings = nn.ModuleDict()
+                for modality_name, modality in self._preprocessors.items():
+                    pos = position_encoding.TrainablePositionEncoding(
+                        index_dim=1,
+                        num_channels=self._common_channels - modality.n_output_channels(),
+                        init_scale=0.02)
+                    self.padding_embeddings[modality_name] = pos
 
     def n_output_channels(self):
-        return self._output_channels
+        return self._common_channels
 
     def forward(self, inputs: torch.Tensor, *,
                 pos: Optional[torch.Tensor] = None,
                 network_input_is_1d: bool = True) -> PreprocessorOutputT:
-        outputs = {}
-        inputs_without_pos = {}
-        for modality, preprocessor in self._modalities.items():
-            outputs[modality], _, inputs_without_pos[modality] = preprocessor(
-                inputs[modality], pos=pos,
-                network_input_is_1d=network_input_is_1d)
+        if self._preprocessors is None:
+            outputs = inputs
+            inputs_without_pos = inputs
+        else:
+            outputs = {}
+            inputs_without_pos = {}
+            for modality, preprocessor in self._preprocessors.items():
+                outputs[modality], inputs_without_pos[modality] = preprocessor(
+                    inputs[modality], pos=pos,
+                    network_input_is_1d=network_input_is_1d)
 
-        padded = {}
-        modality_sizes = {}
-        for modality, output in outputs.items():
-            pos_enc = self.padding_embeddings[modality](output.shape[0])
-            padding = torch.broadcast_to(
-                pos_enc,
-                [output.shape[0], output.shape[1],
-                 self._output_channels - output.shape[2]])
-            output_padded = torch.cat([output, padding], dim=2)
 
-            if self._mask_probs is not None:
+        if self.padding_embeddings is not None:
+            modality_sizes = {}
+
+            padded = {}
+
+            for modality, output in outputs.items():
+                pos_enc = self.padding_embeddings[modality](output.shape[0])
+                padding = torch.broadcast_to(
+                    pos_enc,
+                    [output.shape[0], output.shape[1],
+                     self._common_channels - output.shape[2]])
+                output_padded = torch.cat([output, padding], dim=2)
+                padded[modality] = output_padded
+                modality_sizes[modality] = output_padded.shape[1]
+            outputs = padded
+        else:
+            modality_sizes = {modality: outputs[modality].shape[1] for modality in outputs.keys()}
+
+
+
+        if self._mask_probs is not None:
+            masked = {}
+            for modality, output in outputs.items():
                 # Randomly mask out each token corresponding to this modality
                 mask_token = self.mask_tokens[modality](output.shape[0])
                 mask_prob = self._mask_probs[modality]
 
                 mask = torch.bernoulli(torch.full([output.shape[0], output.shape[1]], fill_value=mask_prob))
                 mask = torch.unsqueeze(mask, dim=2)
-                output_padded = (1 - mask) * output_padded + mask * mask_token
+                output_masked = (1 - mask) * outputs[modality] + mask * mask_token
+                masked[modality] = output_masked
+            outputs = masked
 
-            padded[modality] = output_padded
-            modality_sizes[modality] = output_padded.shape[1]
+
 
         # Apply a predictable ordering to the modalities
-        padded_ls = [padded[k] for k in sorted(padded.keys())]
-        return (torch.cat(padded_ls, dim=1),
+        outputs = [outputs[k] for k in sorted(outputs.keys())]
+        return (torch.cat(outputs, dim=1),
                 modality_sizes,
                 inputs_without_pos)
 
     def set_haiku_params(self, params):
-        for modality in self._modalities.keys():
+        for modality in self._preprocessors.keys():
             self.padding_embeddings[modality].set_haiku_params(params.pop(f"{modality}_padding"))
             if self._mask_probs is not None:
                 self.mask_tokens[modality].set_haiku_params(params.pop(f"{modality}_mask_token"))
 
         if len(params) != 0:
             warnings.warn(f"Some parameters couldn't be matched to model: {params.keys()}")
-
-        # for modality, preprocessor in self._modalities.items():
-        #     preprocessor.set_haiku_params(params)
 
 
 

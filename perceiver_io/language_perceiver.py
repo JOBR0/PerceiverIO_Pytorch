@@ -59,7 +59,7 @@ class LanguagePerceiver(nn.Module):
             input_preprocessors=None,
             encoder=encoder,
             decoder=decoder,
-            output_postprocessor=None)
+            output_postprocessors=None)
 
         self.input_pos_encoding = TrainablePositionEncoding(
             index_dim=max_seq_len, num_channels=embed_dim)

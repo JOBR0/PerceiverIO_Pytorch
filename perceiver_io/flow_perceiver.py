@@ -93,7 +93,7 @@ class FlowPerceiver(nn.Module):
             input_preprocessors=input_preprocessor,
             encoder=encoder,
             decoder=decoder,
-            output_postprocessor=None)
+            output_postprocessors=None)
 
         self.H, self.W = to_2tuple(img_size)
 
@@ -110,7 +110,7 @@ class FlowPerceiver(nn.Module):
 
             preprocessor_params = {key[key.find('/') + 1:]: params.pop(key) for key in list(params.keys()) if
                                    key.startswith("image_preprocessor")}
-            self.perceiver._input_preprocessor.set_haiku_params(preprocessor_params)
+            self.perceiver._multi_preprocessor._preprocessors["default"].set_haiku_params(preprocessor_params)
 
             if len(params) != 0:
                 warnings.warn(f"Some parameters couldn't be matched to model: {params.keys()}")

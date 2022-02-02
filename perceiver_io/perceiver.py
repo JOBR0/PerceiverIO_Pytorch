@@ -8,6 +8,7 @@ import torch.nn as nn
 from timm.models.layers import lecun_normal_
 
 from perceiver_io import position_encoding, io_processors
+from perceiver_io.io_processors import MultimodalPreprocessor
 from perceiver_io.transformer_primitives import CrossAttention, SelfAttention, make_cross_attention_mask
 from utils.utils import init_linear_from_haiku, unravel_index
 
@@ -331,17 +332,38 @@ class Perceiver(nn.Module):
             encoder: PerceiverEncoder,
             decoder: AbstractPerceiverDecoder,
             input_preprocessors=None,
-            output_postprocessors=None):
+            output_postprocessors=None,
+            input_padding_channels: int = 0,
+            input_channels: dict = None,
+            input_mask_probs: dict = None,
+    ):
         super().__init__()
 
         # convert to ModuleDict to register all modules
         if type(input_preprocessors) is dict:
             input_preprocessors = nn.ModuleDict(input_preprocessors)
-        self._input_preprocessor = input_preprocessors
+        elif issubclass(type(input_preprocessors), nn.Module):
+            # Single preprocessor
+            input_preprocessors = nn.ModuleDict({"default": input_preprocessors})
+
+        self._multi_preprocessor = MultimodalPreprocessor(input_preprocessors=input_preprocessors,
+                                                          mask_probs=input_mask_probs,
+                                                          min_padding_size=input_padding_channels,
+                                                          input_channels=input_channels)
+
+        # if input_preprocessors is not None:
+        #     # The number of channels to which all inputs are padded to make them compatible
+        #     self.common_input_channels = (
+        #                 max(m.n_output_channels() for m in input_preprocessors) + input_padding_channels)
+        # elif input_channels is not None:
+        #     self.common_input_channels = (max(m.input_channels() for m in input_channels) + input_padding_channels)
 
         # convert to ModuleDict to register all modules
         if type(output_postprocessors) is dict:
             output_postprocessors = nn.ModuleDict(output_postprocessors)
+        elif type(output_postprocessors) is nn.Module:
+            # Single preprocessor
+            output_postprocessors = nn.ModuleDict({"default": output_postprocessors})
         self._output_postprocessors = output_postprocessors
 
         self._decoder = decoder
@@ -349,9 +371,14 @@ class Perceiver(nn.Module):
 
     def forward(self, inputs, *, subsampled_output_points=None,
                 pos=None, input_mask=None, query_mask=None):
-        if self._input_preprocessor:
+
+        if type(inputs) is torch.Tensor:
+            # Single input
+            inputs = {"default": inputs}
+
+        if self._multi_preprocessor is not None:
             network_input_is_1d = self._encoder._input_is_1d
-            inputs, modality_sizes, inputs_without_pos = self._input_preprocessor(
+            inputs, modality_sizes, inputs_without_pos = self._multi_preprocessor(
                 inputs, pos=pos,
                 network_input_is_1d=network_input_is_1d)
         else:
@@ -369,7 +396,6 @@ class Perceiver(nn.Module):
         # _, output_modality_sizes = self._decoder.output_shape(inputs)
         # output_modality_sizes = output_modality_sizes or modality_sizes
 
-        # TODO adapt for single modality
         output_modality_sizes = {}
         if subsampled_output_points is not None:
             for modality in subsampled_output_points.keys():
@@ -381,19 +407,17 @@ class Perceiver(nn.Module):
         outputs = self._decoder(decoder_query, latents, query_mask=query_mask)
 
         if self._output_postprocessors:
+            if type(outputs) == torch.Tensor:
+                # Slice up modalities by their sizes.
+                assert modality_sizes is not None
+                outputs = restructure(modality_sizes=output_modality_sizes, inputs=outputs)
+            outputs = {modality: postprocessor(
+                outputs[modality], pos=None, modality_sizes=None)
+                for modality, postprocessor in self._output_postprocessors.items()}
 
-            if type(self._output_postprocessors) == nn.ModuleDict:
-                # Multiple postprocessors
-                if type(outputs) == torch.Tensor:
-                    # Slice up modalities by their sizes.
-                    assert modality_sizes is not None
-                    outputs = restructure(modality_sizes=output_modality_sizes, inputs=outputs)
-                outputs = {modality: postprocessor(
-                    outputs[modality], pos=None, modality_sizes=None)
-                    for modality, postprocessor in self._output_postprocessors.items()}
-            else:
-                outputs = self._output_postprocessors(outputs,
-                                                      modality_sizes=output_modality_sizes)
+        if type(outputs) is not torch.Tensor and outputs.keys() == ["default"]:
+            # return tensor directly
+            outputs = outputs["default"]
 
         return outputs
 
@@ -511,7 +535,7 @@ class MultimodalDecoder(AbstractPerceiverDecoder):
     def decoder_query(self, inputs, modality_sizes, inputs_without_pos=None,
                       subsampled_points=None):
         # Partition the flat inputs among the different modalities
-        inputs = io_processors.restructure(modality_sizes, inputs)
+        inputs = restructure(modality_sizes, inputs)
         # Obtain modality-specific decoders' queries
         subsampled_points = subsampled_points or dict()
         decoder_queries = dict()
