@@ -1,34 +1,20 @@
 import base64
-import functools
 import os
-import pickle
-import ssl
-import re
-import tempfile
-
-from urllib import request
 
 import cv2
-import haiku as hk
 import imageio
-import jax
-import jax.numpy as jnp
 import numpy as np
 import scipy.io.wavfile
 
 import torch
+# import functional torch
+import torch.nn.functional as F
 
 from perceiver_io.multimodal_perceiver import MultiModalPerceiver
-
-from IPython.display import HTML
-
-from perceiver import perceiver, io_processors
 
 # Utilities to fetch videos from UCF101 dataset
 from utils.kinetics_700_classes import KINETICS_CLASSES
 
-
-# Utilities to open video files using CV2
 from utils.utils import show_animation
 
 
@@ -60,37 +46,17 @@ def load_video(path, max_frames=0, resize=(224, 224)):
     return np.array(frames) / 255.0
 
 
-def to_gif(images):
-    converted_images = np.clip(images * 255, 0, 255).astype(np.uint8)
-    imageio.mimsave('./animation.gif', converted_images, fps=25)
-    with open('./animation.gif', 'rb') as f:
-        gif_64 = base64.b64encode(f.read()).decode('utf-8')
-    return HTML('<img src="data:image/gif;base64,%s"/>' % gif_64)
-
-
-def play_audio(data, sample_rate=48000):
-    scipy.io.wavfile.write('tmp_audio.wav', sample_rate, data)
-
-    with open('./tmp_audio.wav', 'rb') as f:
-        audio_64 = base64.b64encode(f.read()).decode('utf-8')
-    return HTML('<audio controls src="data:audio/wav;base64,%s"/>' % audio_64)
-
-
-
-
-
 sample_rate, audio = scipy.io.wavfile.read("output.wav")
 if audio.dtype == np.int16:
-  audio = audio.astype(np.float32) / 2**15
+    audio = audio.astype(np.float32) / 2 ** 15
 elif audio.dtype != np.float32:
-  raise ValueError('Unexpected datatype. Model expects sound samples to lie in [-1, 1]')
+    raise ValueError('Unexpected datatype. Model expects sound samples to lie in [-1, 1]')
 
 video_path = "./sample_data/video.avi"
 video = load_video(video_path)
 
 # Visualize inputs
 #show_animation(video)
-
 
 # @title Model construction
 NUM_FRAMES = 16
@@ -122,22 +88,23 @@ checkpoint = torch.load(ckpt_file, map_location=device)
 
 perceiver.load_state_dict(checkpoint['model_state_dict'])
 
-
-
-
 video_input = torch.from_numpy(video[None, :16]).float().to(device)
 audio_input = torch.from_numpy(audio[None, :16 * AUDIO_SAMPLES_PER_FRAME, 0:1]).float().to(device)
-
 
 # Auto-encode the first 16 frames of the video and one of the audio channels
 with torch.inference_mode():
     reconstruction = perceiver(video_input, audio_input)
 
+from utils.utils import dump_pickle
+
+dump_pickle(reconstruction, "temp/output_torch_orgfour.pickle")
+
+
 # Visualize reconstruction of first 16 frames
 show_animation(reconstruction["image"][0])
 
 # Kinetics 700 Labels
-scores, indices = jax.lax.top_k(jax.nn.softmax(reconstruction["label"]), 5)
+scores, indices = torch.top_k(F.softmax(reconstruction["label"]), 5)
 
 for score, index in zip(scores[0], indices[0]):
     print("%s: %s" % (KINETICS_CLASSES[index], score))
@@ -148,27 +115,25 @@ for score, index in zip(scores[0], indices[0]):
 nframes = video.shape[0]
 # Truncate to be divisible by 16
 nframes = nframes - (nframes % 16)
-video_chunks = jnp.reshape(video[:nframes], [nframes // 16, 16, 224, 224, 3])
-audio_chunks = jnp.reshape(audio[:nframes * AUDIO_SAMPLES_PER_FRAME],
-                           [nframes // 16, 16 * AUDIO_SAMPLES_PER_FRAME, 2])
 
-encode = jax.jit(functools.partial(autoencode_video, params, state, rng))
+video_chunks = np.reshape(video[:nframes], [nframes // 16, 16, 224, 224, 3])
+audio_chunks = np.reshape(audio[:nframes * AUDIO_SAMPLES_PER_FRAME],
+                          [nframes // 16, 16 * AUDIO_SAMPLES_PER_FRAME, 2])
 
-# Logically, what we do is the following code. We write out the loop to allocate
-# GPU memory for only one chunk
-#
-# reconstruction = jax.vmap(encode, in_axes=1, out_axes=1)(
-#     video_chunks[None, :], audio_chunks[None, :, :, 0:1])
+with torch.inference_mode():
+    reconstruction = {"image": [], "audio": [], "label": None}
+    for i in range(nframes // 16):
+        output = perceiver(video_chunks[None, i], audio_chunks[None, i, :, 0:1])
 
-chunks = []
-for i in range(nframes // 16):
-    reconstruction = encode(video_chunks[None, i], audio_chunks[None, i, :, 0:1])
-    chunks.append(jax.tree_map(lambda x: np.array(x), reconstruction))
+        reconstruction["image"].append(output["image"])
+        reconstruction["audio"].append(output["audio"])
+        # TODO check what other implementations does here
+        reconstruction["label"] = output["label"]
 
-reconstruction = jax.tree_multimap(lambda *args: np.stack(args, axis=1),
-                                   *chunks)
+    reconstruction["image"] = torch.cat(reconstruction["image"], dim=1)
+    reconstruction["audio"] = torch.cat(reconstruction["audio"], dim=1)
 
-reconstruction = jax.tree_map(lambda x: np.reshape(x, [-1] + list(x.shape[2:])), reconstruction)
+
 
 # Visualize reconstruction of entire video
-table([to_gif(reconstruction['image'][0]), play_audio(np.array(reconstruction['audio'][0]))])
+show_animation(reconstruction["image"][0])
