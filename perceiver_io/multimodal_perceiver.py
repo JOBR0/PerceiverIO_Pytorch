@@ -76,8 +76,7 @@ class MultiModalPerceiver(nn.Module):
             mask_probs={"image": 0.0, "audio": 0.0, "label": 1.0}
         )
 
-        output_postprocessor = io_processors.MultimodalPostprocessor(
-            modalities={
+        output_postprocessors = {
                 "audio": io_processors.AudioPostprocessor(
                     in_channels=512,
                     samples_per_patch=audio_samples_per_patch),
@@ -87,7 +86,7 @@ class MultiModalPerceiver(nn.Module):
                 "label": io_processors.ClassificationPostprocessor(
                     num_input_channels=512,#todo check what"s the point of this postprocessor combined with classification decoder
                     num_classes=num_classes),
-            })
+            }
 
 
         #encoder_input_channels = input_preprocessor.n_output_channels()
@@ -171,10 +170,10 @@ class MultiModalPerceiver(nn.Module):
             use_query_residual=False)
 
         self.perceiver = Perceiver(
-            input_preprocessor=input_preprocessor,
+            input_preprocessors=input_preprocessor,
             encoder=encoder,
             decoder=decoder,
-            output_postprocessor=output_postprocessor)
+            output_postprocessors=output_postprocessors)
 
 
 
@@ -210,9 +209,9 @@ class MultiModalPerceiver(nn.Module):
             classification_postprocessor_params = {key[key.find("/") + 1:]: params.pop(key) for key in list(params.keys()) if
                                              key.startswith("classification_postprocessor")}
 
-            self.perceiver._output_postprocessor._modalities["label"].set_haiku_params(classification_postprocessor_params)
-            self.perceiver._output_postprocessor._modalities["audio"].set_haiku_params(audio_postprocessor_params)
-            self.perceiver._output_postprocessor._modalities["image"].set_haiku_params(projection_postprocessor_params)
+            self.perceiver._output_postprocessors["label"].set_haiku_params(classification_postprocessor_params)
+            self.perceiver._output_postprocessors["audio"].set_haiku_params(audio_postprocessor_params)
+            self.perceiver._output_postprocessors["image"].set_haiku_params(projection_postprocessor_params)
 
             if len(params) != 0:
                 warnings.warn(f"Some parameters couldn't be matched to model: {params.keys()}")

@@ -1,5 +1,6 @@
 import abc
 import warnings
+from typing import Mapping
 
 import numpy as np
 import torch
@@ -9,6 +10,10 @@ from timm.models.layers import lecun_normal_
 from perceiver_io import position_encoding, io_processors
 from perceiver_io.transformer_primitives import CrossAttention, SelfAttention, make_cross_attention_mask
 from utils.utils import init_linear_from_haiku, unravel_index
+
+from utils.utils import dump_pickle
+
+ModalitySizeT = Mapping[str, int]
 
 
 class AbstractPerceiverDecoder(nn.Module, metaclass=abc.ABCMeta):
@@ -253,7 +258,7 @@ class BasicDecoder(AbstractPerceiverDecoder):
         if subsampled_points is not None:
             # unravel_index returns a tuple (x_idx, y_idx, ...)
             # stack to get the [n, d] tensor of coordinates
-            #pos = torch.stack(torch.unravel_index(subsampled_points, self._output_index_dim), dim=1)
+            # pos = torch.stack(torch.unravel_index(subsampled_points, self._output_index_dim), dim=1)
 
             pos = unravel_index(subsampled_points, self._output_index_dim)
             # Map these coordinates to [-1, 1]
@@ -317,21 +322,28 @@ class Perceiver(nn.Module):
     Args:
         encoder (PerceiverEncoder): The encoder to use.
         decoder (AbstractPerceiverDecoder): The decoder to use.
-        input_preprocessor: The input preprocessor to use. Default: None.
-        output_postrocessor: The output preprocessor to use. Default: None.
+        input_preprocessors: The input preprocessor to use. Default: None.
+        output_postprocessors: The output preprocessor to use. Default: None.
     """
 
     def __init__(
             self,
             encoder: PerceiverEncoder,
             decoder: AbstractPerceiverDecoder,
-            input_preprocessor=None,
-            output_postprocessor=None):
+            input_preprocessors=None,
+            output_postprocessors=None):
         super().__init__()
 
-        # Feature and task parameters:
-        self._input_preprocessor = input_preprocessor
-        self._output_postprocessor = output_postprocessor
+        # convert to ModuleDict to register all modules
+        if type(input_preprocessors) is dict:
+            input_preprocessors = nn.ModuleDict(input_preprocessors)
+        self._input_preprocessor = input_preprocessors
+
+        # convert to ModuleDict to register all modules
+        if type(output_postprocessors) is dict:
+            output_postprocessors = nn.ModuleDict(output_postprocessors)
+        self._output_postprocessors = output_postprocessors
+
         self._decoder = decoder
         self._encoder = encoder
 
@@ -354,8 +366,8 @@ class Perceiver(nn.Module):
 
         # Run the network forward:
         latents = self._encoder(inputs, encoder_query, input_mask=input_mask)
-        #_, output_modality_sizes = self._decoder.output_shape(inputs)
-        #output_modality_sizes = output_modality_sizes or modality_sizes
+        # _, output_modality_sizes = self._decoder.output_shape(inputs)
+        # output_modality_sizes = output_modality_sizes or modality_sizes
 
         # TODO adapt for single modality
         output_modality_sizes = {}
@@ -368,11 +380,42 @@ class Perceiver(nn.Module):
 
         outputs = self._decoder(decoder_query, latents, query_mask=query_mask)
 
-        if self._output_postprocessor:
-            outputs = self._output_postprocessor(outputs,
-                                                 modality_sizes=output_modality_sizes)
+        if self._output_postprocessors:
+
+            if type(self._output_postprocessors) == nn.ModuleDict:
+                # Multiple postprocessors
+                if type(outputs) == torch.Tensor:
+                    # Slice up modalities by their sizes.
+                    assert modality_sizes is not None
+                    outputs = restructure(modality_sizes=output_modality_sizes, inputs=outputs)
+                outputs = {modality: postprocessor(
+                    outputs[modality], pos=None, modality_sizes=None)
+                    for modality, postprocessor in self._output_postprocessors.items()}
+            else:
+                outputs = self._output_postprocessors(outputs,
+                                                      modality_sizes=output_modality_sizes)
 
         return outputs
+
+
+def restructure(modality_sizes: ModalitySizeT,
+                inputs: torch.Tensor) -> Mapping[str, torch.Tensor]:
+    """Partitions a [B, N, C] tensor into tensors for each modality.
+  Args:
+    modality_sizes: dict specifying the size of the modality
+    inputs: input tensor
+  Returns:
+    dict mapping name of modality to its associated tensor.
+  """
+    outputs = {}
+    index = 0
+    # Apply a predictable ordering to the modalities
+    for modality in sorted(modality_sizes.keys()):
+        size = modality_sizes[modality]
+        inp = inputs[:, index:index + size]
+        index += size
+        outputs[modality] = inp
+    return outputs
 
 
 class BasicVideoAutoencodingDecoder(AbstractPerceiverDecoder):
@@ -484,7 +527,6 @@ class MultimodalDecoder(AbstractPerceiverDecoder):
                 subsampled_points=subsampled_points.get(modality, None)
             )
 
-            # x = torch.reshape(x, [x.shape[0], torch.prod(x.shape[1:-1]), x.shape[-1]])
             query = query.reshape([query.shape[0], np.prod(query.shape[1:-1]), query.shape[-1]])
 
             pos = self.padding_embeddings[modality](query.shape[0])

@@ -56,7 +56,7 @@ class LanguagePerceiver(nn.Module):
         )
 
         self.perceiver = Perceiver(
-            input_preprocessor=None,
+            input_preprocessors=None,
             encoder=encoder,
             decoder=decoder,
             output_postprocessor=None)

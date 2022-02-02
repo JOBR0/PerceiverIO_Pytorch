@@ -90,7 +90,7 @@ class FlowPerceiver(nn.Module):
         )
 
         self.perceiver = Perceiver(
-            input_preprocessor=input_preprocessor,
+            input_preprocessors=input_preprocessor,
             encoder=encoder,
             decoder=decoder,
             output_postprocessor=None)

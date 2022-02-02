@@ -784,25 +784,6 @@ class IdentityPostprocessor(nn.Module):
         return inputs
 
 
-def restructure(modality_sizes: ModalitySizeT,
-                inputs: torch.Tensor) -> Mapping[str, torch.Tensor]:
-    """Partitions a [B, N, C] tensor into tensors for each modality.
-  Args:
-    modality_sizes: dict specifying the size of the modality
-    inputs: input tensor
-  Returns:
-    dict mapping name of modality to its associated tensor.
-  """
-    outputs = {}
-    index = 0
-    # Apply a predictable ordering to the modalities
-    for modality in sorted(modality_sizes.keys()):
-        size = modality_sizes[modality]
-        inp = inputs[:, index:index + size]
-        index += size
-        outputs[modality] = inp
-    return outputs
-
 
 class MultimodalPreprocessor(nn.Module):
     """Multimodal preprocessing for Perceiver Encoder.
@@ -904,41 +885,6 @@ class MultimodalPreprocessor(nn.Module):
         # for modality, preprocessor in self._modalities.items():
         #     preprocessor.set_haiku_params(params)
 
-
-class MultimodalPostprocessor(nn.Module):
-    """Multimodal postprocessing for Perceiver."""
-
-    def __init__(
-            self,
-            modalities: Mapping[str, PostprocessorT],
-            input_is_dict: bool = False):
-        """Constructor.
-    Args:
-      modalities: dict mapping modality name to post processor for that modality
-      input_is_dict: If True, input is assumed to be dictionary structured,
-        and outputs keep the same dictionary shape. If False, input is a tensor
-        which is sliced up during postprocessing by `modality_sizes`.
-    """
-        super().__init__()
-        if type(modalities) is dict:
-            modalities = nn.ModuleDict(modalities)
-
-        self._modalities = modalities
-        self._input_is_dict = input_is_dict
-
-    def forward(
-            self, inputs: torch.Tensor, *,
-            pos: Optional[torch.Tensor] = None,
-            modality_sizes: Optional[ModalitySizeT] = None) -> Mapping[str,
-                                                                       torch.Tensor]:
-        if not self._input_is_dict:
-            # Slice up modalities by their sizes.
-            assert modality_sizes is not None
-            inputs = restructure(modality_sizes=modality_sizes, inputs=inputs)
-        outputs = {modality: postprocessor(
-            inputs[modality], pos=pos, modality_sizes=None)
-            for modality, postprocessor in self._modalities.items()}
-        return outputs
 
 
 class ClassificationPostprocessor(nn.Module):
