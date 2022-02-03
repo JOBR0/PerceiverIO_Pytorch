@@ -40,12 +40,9 @@ elif prep_type == PrepType.LEARNED_POS_1X1CONV:
 elif prep_type == PrepType.FOURIER_POS_PIXEL:
     ckpt_file = "./pytorch_checkpoints/imagenet_fourier_position_encoding.pth"
 
-
 perceiver = ClassificationPerceiver(num_classes=1000,
                                     img_size=img_size,
                                     prep_type=prep_type)
-
-
 
 # check if file exists
 if not os.path.isfile(ckpt_file):
@@ -69,28 +66,31 @@ perceiver.eval()
 # img_norm = normalize(img_norm)
 
 with open("sample_data/dalmation.jpg", 'rb') as f:
-  img = imageio.imread(f)
+    img = imageio.imread(f)
+
 
 def normalize(im):
-  return (im - np.array(MEAN_RGB)) / np.array(STDDEV_RGB)
+    return (im - np.array(MEAN_RGB)) / np.array(STDDEV_RGB)
+
+
 def resize_and_center_crop(image):
-  """Crops to center of image with padding then scales."""
-  shape = image.shape
+    """Crops to center of image with padding then scales."""
+    shape = image.shape
 
-  image_height = shape[0]
-  image_width = shape[1]
+    image_height = shape[0]
+    image_width = shape[1]
 
-  padded_center_crop_size = ((224 / (224 + 32)) *
-       np.minimum(image_height, image_width).astype(np.float32)).astype(np.int32)
+    padded_center_crop_size = ((224 / (224 + 32)) *
+                               np.minimum(image_height, image_width).astype(np.float32)).astype(np.int32)
 
-  offset_height = ((image_height - padded_center_crop_size) + 1) // 2
-  offset_width = ((image_width - padded_center_crop_size) + 1) // 2
-  crop_window = [offset_height, offset_width,
-                 padded_center_crop_size, padded_center_crop_size]
+    offset_height = ((image_height - padded_center_crop_size) + 1) // 2
+    offset_width = ((image_width - padded_center_crop_size) + 1) // 2
+    crop_window = [offset_height, offset_width,
+                   padded_center_crop_size, padded_center_crop_size]
 
-  # image = tf.image.crop_to_bounding_box(image_bytes, *crop_window)
-  image = image[crop_window[0]:crop_window[0] + crop_window[2], crop_window[1]:crop_window[1]+crop_window[3]]
-  return cv2.resize(image, (224, 224), interpolation=cv2.INTER_CUBIC)
+    # image = tf.image.crop_to_bounding_box(image_bytes, *crop_window)
+    image = image[crop_window[0]:crop_window[0] + crop_window[2], crop_window[1]:crop_window[1] + crop_window[3]]
+    return cv2.resize(image, (224, 224), interpolation=cv2.INTER_CUBIC)
 
 
 # Imagenet classification
@@ -104,12 +104,11 @@ img_norm = normalize(centered_img)[None]
 img_norm = torch.from_numpy(img_norm)
 img_norm = img_norm.permute(0, 3, 1, 2).float()
 
-
 with torch.inference_mode():
     logits = perceiver(img_norm)
     # get top 5 predictions
     top_preds = torch.topk(logits, 5)[1]
-    #top_classes = top_preds[1]
+    # top_classes = top_preds[1]
 
     probs = F.softmax(logits, dim=-1).squeeze()
 
@@ -117,19 +116,12 @@ with torch.inference_mode():
     top_labels = np.array(IMAGENET_LABELS)[top_preds.cpu().numpy()]
     top_probs = probs[top_preds]
 
-
     print(top_preds)
     print(top_probs)
     print(top_labels)
-
 
 print(logits)
 
 # Show prediciton
 # plt.imshow(img[0].permute(1, 2, 0).cpu().numpy()/255)
 # plt.show()
-
-
-
-
-
