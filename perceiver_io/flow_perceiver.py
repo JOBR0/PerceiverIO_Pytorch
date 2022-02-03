@@ -6,12 +6,16 @@ from typing import Sequence
 import torch.nn as nn
 import torch
 
+from perceiver_io.output_queries import FlowQuery
 from perceiver_io.perceiver import PerceiverEncoder, Perceiver, PerceiverDecoder
 from perceiver_io import io_processors
 from timm.models.layers import to_2tuple
 
 import torch.nn.functional as F
 from torch.cuda.amp import autocast
+
+from perceiver_io.position_encoding import PosEncodingType
+from perceiver_io.postprocessors import FlowPostprocessor
 
 
 class FlowPerceiver(nn.Module):
@@ -28,7 +32,7 @@ class FlowPerceiver(nn.Module):
     def __init__(
             self,
             img_size: Sequence[int] = (368, 496),
-            flow_scale_factor: int = 20,
+            flow_scale_factor: int = 100/20,
             n_latents: int = 2048,
             num_latent_channels=512,
             n_self_attends: int = 24,
@@ -45,7 +49,7 @@ class FlowPerceiver(nn.Module):
         input_preprocessor = io_processors.ImagePreprocessor(
             img_size=img_size,
             input_channels=channels * patch_size ** 2,
-            position_encoding_type='fourier',
+            position_encoding_type=PosEncodingType.FOURIER,
             fourier_position_encoding_kwargs=dict(
                 num_bands=64,
                 max_resolution=img_size,
@@ -59,41 +63,35 @@ class FlowPerceiver(nn.Module):
             temporal_downsample=2,
             num_channels=preprocessor_channels)
 
-        encoder_input_channels = input_preprocessor.n_output_channels()
-
-        encoder = PerceiverEncoder(
-            num_input_channels=encoder_input_channels,
-            num_self_attends_per_block=n_self_attends,
-            # Weights won't be shared if num_blocks is set to 1.
-            num_blocks=1,
-            num_latents=n_latents,
-            num_cross_attend_heads=1,
-            num_latent_channels=num_latent_channels,
+        perceiver_encoder_kwargs = dict(
             num_self_attend_heads=16,
-            cross_attend_widening_factor=1,
-            self_attend_widening_factor=1,
-            dropout_prob=0.0,
-            latent_pos_enc_init_scale=0.02,
-            cross_attention_shape_for_attn='kv')
-
-        decoder = FlowDecoder(
-            query_channels=encoder_input_channels,
-            num_latent_channels=num_latent_channels,
-            output_img_size=img_size,
-            rescale_factor=100.0,
-            use_query_residual=False,
-            output_num_channels=2,
+        )
+        perceiver_decoder_kwargs = dict(
             output_w_init="zeros",
-            # We query the decoder using the first frame features
-            # rather than a standard decoder position encoding.
-            position_encoding_type='none'
+        )
+
+        output_query = FlowQuery(
+            preprocessed_input_channels=input_preprocessor.n_output_channels(),
+            output_img_size=img_size,
+            output_num_channels=2,
+        )
+
+        postprocessor = FlowPostprocessor(
+            img_size=img_size,
+            flow_scale_factor=flow_scale_factor
         )
 
         self.perceiver = Perceiver(
+            final_project_out_channels=2,
+            num_blocks=1,
+            num_self_attends_per_block=n_self_attends,
+            num_latents=n_latents,
+            num_latent_channels=num_latent_channels,
+            perceiver_encoder_kwargs=perceiver_encoder_kwargs,
+            perceiver_decoder_kwargs=perceiver_decoder_kwargs,
+            output_queries=output_query,
             input_preprocessors=input_preprocessor,
-            encoder=encoder,
-            decoder=decoder,
-            output_postprocessors=None)
+            output_postprocessors=postprocessor,)
 
         self.H, self.W = to_2tuple(img_size)
 
@@ -104,7 +102,8 @@ class FlowPerceiver(nn.Module):
             encoder_params = {key[key.find('/') + 1:]: params.pop(key) for key in list(params.keys()) if
                               key.startswith("perceiver_encoder")}
             self.perceiver._encoder.set_haiku_params(encoder_params)
-            decoder_params = {key[key.find('/') + 1:]: params.pop(key) for key in list(params.keys()) if
+            decoder_params = {key[key.find('basic_decoder/') + len("basic_decoder/"):]: params.pop(key) for key in
+                              list(params.keys()) if
                               key.startswith("flow_decoder")}
             self.perceiver._decoder.set_haiku_params(decoder_params)
 
@@ -148,7 +147,7 @@ class FlowPerceiver(nn.Module):
             patch = io_processors.patches_for_flow(patch)
             output = self.perceiver(patch)
             output = output.permute(0, 3, 1, 2)
-        return self._flow_scale_factor * output
+        return output
 
     def forward(self, image1: torch.Tensor, image2: torch.Tensor, test_mode: bool = False, min_overlap: int = 20):
         """
@@ -215,67 +214,3 @@ class FlowPerceiver(nn.Module):
         return output
 
 
-class FlowDecoder(nn.Module):
-    """Cross-attention based flow decoder.
-    Args:
-        query_channels (int): Number of channels in the query for cross-attention. This should correspond to
-            the number of encoder input channels if the same input is used for both encoder and decoder.
-        num_latent_channels: (int): Number of channels in the latent representation.
-        output_img_size (Sequence[int]): Size of the output image.
-        output_num_channels (int): Number of channels in output. Default: 2 (for flow)
-        rescale_factor (float): Default: 100.0
-        """
-
-    def __init__(self,
-                 query_channels: int,
-                 num_latent_channels: int,
-                 output_img_size: Sequence[int],
-                 output_num_channels: int = 2,
-                 rescale_factor: float = 100.0,
-                 **decoder_kwargs):
-        super().__init__()
-
-        self.query_channels = query_channels
-
-        self._output_image_shape = output_img_size
-        self._output_num_channels = output_num_channels
-        self._rescale_factor = rescale_factor
-        self.decoder = PerceiverDecoder(
-            num_latent_channels=num_latent_channels,
-            query_channels=query_channels,
-            final_project_out_channels=output_num_channels,
-            **decoder_kwargs)
-
-    def output_shape(self, inputs):
-        # The channel dimensions of output here don't necessarily correspond to
-        # (u, v) of flow: they may contain dims needed for the post-processor.
-        return ((inputs.shape[0],) + tuple(self._output_image_shape) + (
-            self._output_num_channels,), None)
-
-    def n_query_channels(self):
-        return self.query_channels
-
-    def decoder_query(self, inputs, modality_sizes=None, inputs_without_pos=None, subsampled_points=None):
-        if subsampled_points is not None:
-            raise ValueError("FlowDecoder doesn't support subsampling yet.")
-        # assumes merged in time
-        return inputs
-
-    def forward(self, query, latents, *, query_mask=None):
-        # Output flow and rescale.
-        preds = self.decoder(query, latents)
-        preds /= self._rescale_factor
-
-        return preds.reshape([preds.shape[0]] + list(self._output_image_shape) +
-                             [preds.shape[-1]])
-
-    def set_haiku_params(self, params):
-        params = {key[key.find('/') + 1:]: params[key] for key in params.keys()}
-
-        basic_decoder_params = {key[key.find('/') + 1:]: params.pop(key) for key in list(params.keys()) if
-                                key.startswith("basic_decoder")}
-
-        self.decoder.set_haiku_params(basic_decoder_params)
-
-        if len(params) != 0:
-            warnings.warn(f"Some parameters couldn't be matched to the model: {params.keys()}")

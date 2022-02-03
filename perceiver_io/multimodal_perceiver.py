@@ -206,7 +206,7 @@ class MultiModalPerceiver(nn.Module):
 
             self.perceiver._multi_preprocessor.set_haiku_params(preprocessor_params)
 
-            classification_decoder_params = {key[key.find("/") + 1:]: params.pop(key) for key in list(params.keys()) if
+            classification_decoder_params = {key[key.find("/") + 1 + len("~/basic_decoder/"):]: params.pop(key) for key in list(params.keys()) if
                                              key.startswith("classification_decoder")}
 
             self.perceiver._output_queries["label"].set_haiku_params(classification_decoder_params)

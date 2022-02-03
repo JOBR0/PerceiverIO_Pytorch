@@ -28,6 +28,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from perceiver_io import position_encoding
+from perceiver_io.position_encoding import PosEncodingType
 from utils.utils import conv_output_shape, init_linear_from_haiku, same_padding, init_conv_from_haiku, \
     init_batchnorm_from_haiku
 
@@ -336,7 +337,7 @@ class ImagePreprocessor(nn.Module):
             prep_type: str = 'conv',
             spatial_downsample: int = 4,
             temporal_downsample: int = 1,
-            position_encoding_type: str = 'fourier',
+            position_encoding_type: PosEncodingType = PosEncodingType.FOURIER,
             n_extra_pos_mlp: int = 0,
             num_channels: int = 64,
             conv_after_patching: bool = False,
@@ -529,7 +530,7 @@ class ImagePreprocessor(nn.Module):
                                        key.startswith("position_encoding_projector")}
 
         if len(position_encoding_projector) > 0:
-            if self._position_encoding_type == "trainable":
+            if self._position_encoding_type == PosEncodingType.TRAINABLE:
                 self._positional_encoding.set_haiku_params(position_encoding_projector,
                                                            params.pop("trainable_position_encoding"))
             else:
@@ -815,13 +816,10 @@ class MultimodalPreprocessor(nn.Module):
             assert input_channels is None, "input_channels and modalities are mutually exclusive"
             input_channels = {modality: p.n_output_channels() for modality, p in self._preprocessors.items()}
             self._common_channels = (max(input_channels.values()) + self._min_padding_size)
-        elif input_channels is not None:
-            self._common_channels = (max(input_channels.values()) + self._min_padding_size)
         else:
-            assert mask_probs is None, "Masking requires knowledge of input channels at construction. Either input_preprocessors have to " \
-                                       "be used or input_channels have to be given."
-            assert min_padding_size == 0, "Padding requires knowledge of input channels at construction. Either input_preprocessors have to " \
-                                          "be used or input_channels have to be given."
+            assert input_channels is not None, "if no preprocessors, input_channels must be specified"
+            self._common_channels = (max(input_channels.values()) + self._min_padding_size)
+
 
         #self.input_channels = input_channels
 

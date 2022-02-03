@@ -6,8 +6,11 @@ from typing import Sequence
 import torch.nn as nn
 import torch
 
+from perceiver_io.output_queries import TrainableQuery
 from perceiver_io.perceiver import PerceiverEncoder, Perceiver
 from perceiver_io import io_processors
+
+from perceiver_io.position_encoding import PosEncodingType
 
 from perceiver_io.perceiver import  PerceiverDecoder
 
@@ -39,7 +42,7 @@ class ClassificationPerceiver(nn.Module):
             input_preprocessor = io_processors.ImagePreprocessor(
                 img_size=img_size,
                 input_channels=img_channels,
-                position_encoding_type='fourier',
+                position_encoding_type=PosEncodingType.FOURIER,
                 fourier_position_encoding_kwargs=dict(
                     concat_pos=True,
                     max_resolution=(56, 56),
@@ -52,7 +55,7 @@ class ClassificationPerceiver(nn.Module):
             input_preprocessor = io_processors.ImagePreprocessor(
                 img_size=img_size,
                 input_channels=img_channels,
-                position_encoding_type='trainable',
+                position_encoding_type=PosEncodingType.TRAINABLE,
                 trainable_position_encoding_kwargs=dict(
                     init_scale=0.02,
                     num_channels=256,
@@ -68,7 +71,7 @@ class ClassificationPerceiver(nn.Module):
             input_preprocessor = io_processors.ImagePreprocessor(
                 img_size=img_size,
                 input_channels=img_channels,
-                position_encoding_type='fourier',
+                position_encoding_type=PosEncodingType.FOURIER,
                 fourier_position_encoding_kwargs=dict(
                     concat_pos=True,
                     max_resolution=(224, 224),
@@ -81,38 +84,39 @@ class ClassificationPerceiver(nn.Module):
         else:
             raise ValueError(f"Unknown prep_type type: {prep_type}")
 
-        encoder = PerceiverEncoder(
-            num_input_channels=input_preprocessor.n_output_channels(),
-            cross_attend_widening_factor=1,
-            cross_attention_shape_for_attn='kv',
-            dropout_prob=0,
-            num_blocks=8,
-            num_cross_attend_heads=1,
+        perceiver_encoder_kwargs = dict(
             num_self_attend_heads=8,
-            num_self_attends_per_block=6,
-            num_latent_channels=1024,
-            self_attend_widening_factor=1,
-            use_query_residual=True,
-            num_latents=512,
-            latent_pos_enc_init_scale=0.02)
+            use_query_residual=True,)
 
         decoder_query_residual = False if prep_type == "learned_pos_encoding" else True
 
-        decoder = ClassificationDecoder(
-            num_classes=num_classes,
-            num_latent_channels=1024,
-            position_encoding_type='trainable',
-            trainable_position_encoding_kwargs=dict(
-                init_scale=0.02,
-                num_channels=1024,
-            ),
+        perceiver_decoder_kwargs = dict(
+            # num_classes=num_classes,
+            # num_latent_channels=1024,
+            # position_encoding_type=PosEncodingType.TRAINABLE,
+            # trainable_position_encoding_kwargs=dict(
+            #     init_scale=0.02,
+            #     num_channels=1024,
+            # ),
             use_query_residual=decoder_query_residual,
         )
 
+        output_query = TrainableQuery(
+            output_index_dims=num_classes,
+            num_channels=1024,
+            init_scale=0.02,
+        )
+
         self.perceiver = Perceiver(
+            num_blocks=8,
+            num_self_attends_per_block=6,
+            num_latents=512,
+            num_latent_channels=1024,
             input_preprocessors=input_preprocessor,
-            encoder=encoder,
-            decoder=decoder,
+            perceiver_encoder_kwargs=perceiver_encoder_kwargs,
+            output_queries=output_query,
+            perceiver_decoder_kwargs=perceiver_decoder_kwargs,
+            final_project_out_channels=num_classes,
             output_postprocessors=None)
 
     def load_haiku_params(self, file):
@@ -125,8 +129,17 @@ class ClassificationPerceiver(nn.Module):
             encoder_params = {key[key.find('/') + 1:]: params.pop(key) for key in list(params.keys()) if
                               key.startswith("perceiver_encoder")}
             self.perceiver._encoder.set_haiku_params(encoder_params)
-            decoder_params = {key[key.find('/') + 1:]: params.pop(key) for key in list(params.keys()) if
+            # decoder_params = {key[key.find('/') + 1:]: params.pop(key) for key in list(params.keys()) if
+            #                   key.startswith("classification_decoder")}
+
+            decoder_params = {key[key.find('basic_decoder/') + len("basic_decoder/"):]: params.pop(key) for key in
+                              list(params.keys()) if
                               key.startswith("classification_decoder")}
+
+            query_params = {key: decoder_params.pop(key) for key in list(decoder_params.keys()) if
+                            key.startswith("~")}
+
+            self.perceiver._output_queries["default"].set_haiku_params(query_params)
             self.perceiver._decoder.set_haiku_params(decoder_params)
 
             preprocessor_params = {key[key.find('/') + 1:]: params.pop(key) for key in list(params.keys()) if

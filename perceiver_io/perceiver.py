@@ -296,13 +296,16 @@ class Perceiver(nn.Module):
             output_queries=None,
             output_query_padding_channels: int = 0,
             input_padding_channels: int = 0,
-            input_channels: dict = None,
+            input_channels: dict = None, # TODO make int or dict
             input_mask_probs: dict = None,
     ):
         super().__init__()
 
         if final_project_out_channels is None:
             final_project_out_channels = num_latent_channels
+
+        if type(input_channels) is int:
+            input_channels = {"default": input_channels}
 
         # convert to ModuleDict to register all modules
         if type(input_preprocessors) is dict:
@@ -319,7 +322,7 @@ class Perceiver(nn.Module):
         # convert to ModuleDict to register all modules
         if type(output_postprocessors) is dict:
             output_postprocessors = nn.ModuleDict(output_postprocessors)
-        elif type(output_postprocessors) is nn.Module:
+        elif issubclass(type(output_postprocessors), nn.Module):
             # Single preprocessor
             output_postprocessors = nn.ModuleDict({"default": output_postprocessors})
         self._output_postprocessors = output_postprocessors
@@ -327,7 +330,7 @@ class Perceiver(nn.Module):
         # convert to ModuleDict to register all modules
         if type(output_queries) is dict:
             output_queries = nn.ModuleDict(output_queries)
-        elif type(output_queries) is nn.Module:
+        elif issubclass(type(output_queries), nn.Module):
             # Single preprocessor
             output_queries = nn.ModuleDict({"default": output_queries})
         self._output_queries = output_queries
@@ -388,13 +391,12 @@ class Perceiver(nn.Module):
         # _, output_modality_sizes = self._decoder.output_shape(inputs)
         # output_modality_sizes = output_modality_sizes or modality_sizes
 
-        output_modality_sizes = {}
+        output_modality_sizes = modality_sizes
         if subsampled_output_points is not None:
             for modality in subsampled_output_points.keys():
                 if subsampled_output_points[modality] is not None:
                     output_modality_sizes[modality] = subsampled_output_points[modality].shape[0]
-                else:
-                    output_modality_sizes[modality] = modality_sizes[modality]
+
 
         outputs = self._decoder(decoder_query, latents, query_mask=query_mask)
 
@@ -407,8 +409,8 @@ class Perceiver(nn.Module):
                 outputs[modality], pos=None, modality_sizes=None)
                 for modality, postprocessor in self._output_postprocessors.items()}
 
-        if type(outputs) is not torch.Tensor and outputs.keys() == ["default"]:
-            # return tensor directly
+        if type(outputs) is not torch.Tensor and list(outputs.keys()) == ["default"]:
+            # return tensor directly if input was given as tensor
             outputs = outputs["default"]
 
         return outputs
