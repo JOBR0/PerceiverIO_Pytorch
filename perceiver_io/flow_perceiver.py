@@ -6,16 +6,17 @@ from typing import Sequence
 import torch.nn as nn
 import torch
 
+from perceiver_io.io_processors.preprocessors import ImagePreprocessor
+from perceiver_io.io_processors.processor_utils import patches_for_flow
 from perceiver_io.output_queries import FlowQuery
-from perceiver_io.perceiver import PerceiverEncoder, Perceiver, PerceiverDecoder
-from perceiver_io import io_processors
+from perceiver_io.perceiver import Perceiver
 from timm.models.layers import to_2tuple
 
 import torch.nn.functional as F
 from torch.cuda.amp import autocast
 
 from perceiver_io.position_encoding import PosEncodingType
-from perceiver_io.postprocessors import FlowPostprocessor
+from perceiver_io.io_processors.postprocessors import FlowPostprocessor
 
 
 class FlowPerceiver(nn.Module):
@@ -46,7 +47,7 @@ class FlowPerceiver(nn.Module):
 
         preprocessor_channels = 64
 
-        input_preprocessor = io_processors.ImagePreprocessor(
+        input_preprocessor = ImagePreprocessor(
             img_size=img_size,
             input_channels=channels * patch_size ** 2,
             position_encoding_type=PosEncodingType.FOURIER,
@@ -144,7 +145,7 @@ class FlowPerceiver(nn.Module):
         """Predict flow for one image patch as big as training images"""
         with autocast(enabled=self.mixed_precision):
             # Extract overlapping 3x3 patches
-            patch = io_processors.patches_for_flow(patch)
+            patch = patches_for_flow(patch)
             output = self.perceiver(patch)
             output = output.permute(0, 3, 1, 2)
         return output

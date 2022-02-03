@@ -7,9 +7,11 @@ import torch
 
 import numpy as np
 
+from perceiver_io.io_processors.postprocessors import AudioPostprocessor, ProjectionPostprocessor, \
+    ClassificationPostprocessor
+from perceiver_io.io_processors.preprocessors import AudioPreprocessor, ImagePreprocessor, OneHotPreprocessor
 from perceiver_io.output_queries import FourierQuery, TrainableQuery
 from perceiver_io.perceiver import Perceiver
-from perceiver_io import io_processors
 from perceiver_io.position_encoding import PosEncodingType
 
 
@@ -38,7 +40,7 @@ class MultiModalPerceiver(nn.Module):
         n_audio_samples = num_frames * audio_samples_per_frame
 
         input_preprocessors = {
-            "audio": io_processors.AudioPreprocessor(
+            "audio": AudioPreprocessor(
                 samples_per_batch=n_audio_samples,
                 position_encoding_type=PosEncodingType.FOURIER,
                 fourier_position_encoding_kwargs=dict(
@@ -50,7 +52,7 @@ class MultiModalPerceiver(nn.Module):
                 n_extra_pos_mlp=0,
                 prep_type="patches",
                 samples_per_patch=audio_samples_per_patch),
-            "image": io_processors.ImagePreprocessor(
+            "image": ImagePreprocessor(
                 img_size=(self.H, self.W),
                 input_channels=img_channels,
                 num_frames=num_frames,
@@ -65,19 +67,19 @@ class MultiModalPerceiver(nn.Module):
                 prep_type="patches",
                 spatial_downsample=4,
                 temporal_downsample=1),
-            "label": io_processors.OneHotPreprocessor(
+            "label": OneHotPreprocessor(
                 input_channels=num_classes,
             ),
         }
 
         output_postprocessors = {
-            "audio": io_processors.AudioPostprocessor(
+            "audio": AudioPostprocessor(
                 in_channels=512,
                 samples_per_patch=audio_samples_per_patch),
-            "image": io_processors.ProjectionPostprocessor(
+            "image": ProjectionPostprocessor(
                 num_inputs=512,
                 num_outputs=3),
-            "label": io_processors.ClassificationPostprocessor(
+            "label": ClassificationPostprocessor(
                 num_input_channels=512,
                 # todo check what"s the point of this postprocessor combined with classification decoder
                 num_classes=num_classes),
@@ -111,64 +113,7 @@ class MultiModalPerceiver(nn.Module):
             "image": image_out_query,
             "label": label_out_query, }
 
-        # image_decoder = BasicVideoAutoencodingDecoder(
-        #     # Autoencoding, don"t pass inputs to the queries.
-        #     concat_preprocessed_input=False,
-        #     # subsampled_index_dims=subsampling["image"], #TODO needed?
-        #     output_shape=(5, 3, 224, 224),  # TODO change#images.shape[:4],
-        #
-        #     position_encoding_type="fourier",
-        #     fourier_position_encoding_kwargs=dict(
-        #         num_bands=32,
-        #         max_resolution=(num_frames, self.H // 4, self.W // 4),
-        #         sine_only=False,
-        #         concat_pos=True,
-        #     ),
-        # )
 
-        # TODO change
-        subsampled_index_dims = 1
-
-        # decoder = MultimodalDecoder(
-        #     # Autoencoding, don"t pass inputs to the queries.
-        #     concat_preprocessed_input=False,
-        #     # subsampled_index_dims=subsampled_index_dims,# TODO needed?
-        #     # Modality specific decoders are used ONLY to generate queries.
-        #     # All modalties are decoded together using a unified decoder.
-        #     modalities={
-        #         "audio": BasicDecoder(
-        #             # Autoencoding, don"t pass inputs to the queries.
-        #             concat_preprocessed_input=False,
-        #             # subsampled_index_dims=subsampling["audio"],#TODO needed?
-        #             output_index_dims=(n_audio_samples // self.audio_samples_per_patch,),
-        #             num_latent_channels=1024,  # TODO check why does it differ from encoder
-        #             output_num_channels=512,
-        #             use_query_residual=False,
-        #             position_encoding_type="fourier",
-        #             fourier_position_encoding_kwargs=dict(
-        #                 num_bands=192,
-        #                 max_resolution=(n_audio_samples,),
-        #                 sine_only=False,
-        #                 concat_pos=True,
-        #             ),
-        #         ),
-        #         "image": image_decoder,
-        #         "label": ClassificationDecoder(
-        #             # Autoencoding, don"t pass inputs to the queries.
-        #             concat_preprocessed_input=False,
-        #
-        #
-        #             position_encoding_type="trainable",
-        #             trainable_position_encoding_kwargs=dict(
-        #                 num_channels=1024,
-        #                 init_scale=0.02,
-        #             ),
-        #         ),
-        #     },
-        #     num_outputs=None,
-        #     output_num_channels=512,
-        #     num_latent_channels=num_latent_channels,
-        #     use_query_residual=False)
 
         self.perceiver = Perceiver(
             num_self_attends_per_block=8,

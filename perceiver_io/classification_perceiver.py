@@ -6,13 +6,13 @@ from typing import Sequence
 import torch.nn as nn
 import torch
 
+from perceiver_io.io_processors.preprocessors import ImagePreprocessor
 from perceiver_io.output_queries import TrainableQuery
 from perceiver_io.perceiver import PerceiverEncoder, Perceiver
-from perceiver_io import io_processors
+
 
 from perceiver_io.position_encoding import PosEncodingType
 
-from perceiver_io.perceiver import  PerceiverDecoder
 
 
 class PrepType(Enum):
@@ -39,7 +39,7 @@ class ClassificationPerceiver(nn.Module):
         img_channels = 3
 
         if prep_type == PrepType.FOURIER_POS_CONVNET:
-            input_preprocessor = io_processors.ImagePreprocessor(
+            input_preprocessor = ImagePreprocessor(
                 img_size=img_size,
                 input_channels=img_channels,
                 position_encoding_type=PosEncodingType.FOURIER,
@@ -52,7 +52,7 @@ class ClassificationPerceiver(nn.Module):
                 prep_type='conv')
 
         elif prep_type == PrepType.LEARNED_POS_1X1CONV:
-            input_preprocessor = io_processors.ImagePreprocessor(
+            input_preprocessor = ImagePreprocessor(
                 img_size=img_size,
                 input_channels=img_channels,
                 position_encoding_type=PosEncodingType.TRAINABLE,
@@ -68,7 +68,7 @@ class ClassificationPerceiver(nn.Module):
             )
 
         elif prep_type == PrepType.FOURIER_POS_PIXEL:
-            input_preprocessor = io_processors.ImagePreprocessor(
+            input_preprocessor = ImagePreprocessor(
                 img_size=img_size,
                 input_channels=img_channels,
                 position_encoding_type=PosEncodingType.FOURIER,
@@ -91,13 +91,6 @@ class ClassificationPerceiver(nn.Module):
         decoder_query_residual = False if prep_type == "learned_pos_encoding" else True
 
         perceiver_decoder_kwargs = dict(
-            # num_classes=num_classes,
-            # num_latent_channels=1024,
-            # position_encoding_type=PosEncodingType.TRAINABLE,
-            # trainable_position_encoding_kwargs=dict(
-            #     init_scale=0.02,
-            #     num_channels=1024,
-            # ),
             use_query_residual=decoder_query_residual,
         )
 
@@ -156,53 +149,3 @@ class ClassificationPerceiver(nn.Module):
         :param img: (batch_size, 3, H, W)
         """
         return self.perceiver(img.permute(0, 2, 3, 1))
-
-
-#
-# class ClassificationDecoder(AbstractPerceiverDecoder):
-#     """Cross-attention based classification decoder.
-#   Light-weight wrapper of `BasicDecoder` for logit output.
-#   """
-#
-#     def __init__(self,
-#                  num_classes: int,
-#                  query_channels: int = None,
-#                  **decoder_kwargs):
-#         super().__init__()
-#
-#
-#         self._num_classes = num_classes
-#         self.decoder = BasicDecoder(
-#             query_channels=query_channels,
-#             output_index_dims=(1,),  # Predict a single logit array.
-#             output_num_channels=num_classes,
-#             **decoder_kwargs)
-#
-#     def decoder_query(self, inputs, modality_sizes=None,
-#                       inputs_without_pos=None, subsampled_points=None):
-#         return self.decoder.decoder_query(inputs, modality_sizes,
-#                                           inputs_without_pos,
-#                                           subsampled_points=subsampled_points)
-#
-#     def n_query_channels(self):
-#         return self.decoder.n_query_channels()
-#
-#
-#     def output_shape(self, inputs):
-#         return (inputs.shape[0], self._num_classes), None
-#
-#     def forward(self, query, z, *, query_mask=None):
-#         # B x 1 x num_classes -> B x num_classes
-#         logits = self.decoder(query, z)
-#         return logits[:, 0, :]
-#
-#     def set_haiku_params(self, params):
-#         params = {key[key.find('/') + 1:]: params[key] for key in params.keys()}
-#
-#         basic_decoder_params = {key[key.find('/') + 1:]: params.pop(key) for key in list(params.keys()) if
-#                                 key.startswith("basic_decoder")}
-#
-#         self.decoder.set_haiku_params(basic_decoder_params)
-#
-#         if len(params) != 0:
-#             warnings.warn(f"Some parameters couldn't be matched to model: {params.keys()}")

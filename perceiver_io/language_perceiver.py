@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch
 
 
-from perceiver_io.io_processors import EmbeddingDecoder
+from perceiver_io.io_processors.processor_utils import EmbeddingDecoder
 from perceiver_io.output_queries import TrainableQuery
 from perceiver_io.perceiver import PerceiverEncoder, Perceiver
 
