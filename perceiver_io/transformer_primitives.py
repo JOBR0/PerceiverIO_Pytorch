@@ -407,11 +407,12 @@ class CrossAttention(nn.Module):
                 attention_bias=None,
                 return_matrix: bool=False):
 
-        inputs_kv = self.layer_norm_kv(inputs_kv)
+        inputs_kv_norm = self.layer_norm_kv(inputs_kv)
+        inputs_q_norm = self.layer_norm_q(inputs_q)
 
-        attention = self.attention(inputs_q=self.layer_norm_q(inputs_q),
-                                   inputs_k=inputs_kv,
-                                   inputs_v=inputs_kv,
+        attention = self.attention(inputs_q=inputs_q_norm,
+                                   inputs_k=inputs_kv_norm,
+                                   inputs_v=inputs_kv_norm,
                                    attention_mask=attention_mask,
                                    attention_bias=attention_bias,
                                    return_matrix = return_matrix)
