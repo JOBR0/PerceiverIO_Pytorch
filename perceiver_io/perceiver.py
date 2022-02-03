@@ -1,6 +1,6 @@
 import abc
 import warnings
-from typing import Mapping
+from typing import Mapping, Dict
 
 import numpy as np
 import torch
@@ -15,23 +15,6 @@ from utils.utils import init_linear_from_haiku, unravel_index
 from utils.utils import dump_pickle
 
 ModalitySizeT = Mapping[str, int]
-
-
-class AbstractPerceiverDecoder(nn.Module, metaclass=abc.ABCMeta):
-    """Abstract Perceiver decoder."""
-
-    @abc.abstractmethod
-    def decoder_query(self, inputs, modality_sizes=None, inputs_without_pos=None,
-                      subsampled_points=None):
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def output_shape(self, inputs):
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def forward(self, query, latents, *, query_mask=None):
-        raise NotImplementedError
 
 
 class PerceiverEncoder(nn.Module):
@@ -154,10 +137,10 @@ class PerceiverEncoder(nn.Module):
             warnings.warn(f"Some parameters couldn't be matched to model: {params.keys()}")
 
 
-class BasicDecoder(AbstractPerceiverDecoder):
+class PerceiverDecoder(nn.Module):
     """Cross-attention-based decoder.
     Args:
-        output_num_channels (int): Number of channels to which output is projected if final_project is True.
+        final_project_out_channels (int): Number of channels to which output is projected if final_project is True.
         position_encoding_type (str) Default: 'trainable'.
         # Ignored if position_encoding_type == 'none':
         output_index_dims (int):  Default: None.
@@ -176,10 +159,11 @@ class BasicDecoder(AbstractPerceiverDecoder):
     """
 
     def __init__(self,
-                 output_num_channels: int,
-                 position_encoding_type: str = 'trainable',
-                 output_index_dims: int = None,
-                 subsampled_index_dims: int = None,
+                 query_channels: int,
+                 final_project_out_channels: int,
+                 # position_encoding_type: str = 'trainable',
+                 # output_index_dims: int = None,
+                 # subsampled_index_dims: int = None,
                  num_latent_channels: int = 1024,
                  qk_channels: int = None,
                  v_channels: int = None,
@@ -188,38 +172,17 @@ class BasicDecoder(AbstractPerceiverDecoder):
                  concat_preprocessed_input: bool = False,
                  num_heads: int = 1,
                  final_project: bool = True,
-                 query_channels: int = None,
+
                  **position_encoding_kwargs):
         super().__init__()
-        self._position_encoding_type = position_encoding_type
 
-        # If `none`, the decoder will not construct any position encodings.
-        # You should construct your own when quering the decoder.
-        self.output_pos_enc = None
-        if self._position_encoding_type != 'none':
-            self.output_pos_enc = position_encoding.build_position_encoding(
-                position_encoding_type,
-                index_dims=output_index_dims,
-                **position_encoding_kwargs)
-
-        self._output_index_dim = output_index_dims
-        if subsampled_index_dims is None:
-            subsampled_index_dims = output_index_dims
-        self._subsampled_index_dims = subsampled_index_dims
-        self._output_num_channels = output_num_channels
+        self._output_num_channels = final_project_out_channels
         self._output_w_init = output_w_init
         self._use_query_residual = use_query_residual
         self._qk_channels = qk_channels
         self._v_channels = v_channels
         self._final_project = final_project
         self._num_heads = num_heads
-
-        self._concat_preprocessed_input = concat_preprocessed_input
-
-        if query_channels is None:
-            assert concat_preprocessed_input == False, "If concat_preprocessed_input is True, you must specify " \
-                                                       "query_channels."
-            query_channels = self.output_pos_enc.n_output_channels()
 
         self.query_channels = query_channels
 
@@ -300,19 +263,10 @@ class BasicDecoder(AbstractPerceiverDecoder):
         cross_attention_params = {key[key.find('/') + 1:]: params.pop(key) for key in list(params.keys()) if
                                   key.startswith("cross_attention")}
 
-        # TODO bad solution
-        if len(cross_attention_params) > 0:
-            self.decoding_cross_attn.set_haiku_params(cross_attention_params)
-        else:
-            print("No cross attention params found")
+        self.decoding_cross_attn.set_haiku_params(cross_attention_params)
 
         if self._final_project:
             init_linear_from_haiku(self.final_layer, params.pop("output"))
-
-        if self._position_encoding_type == 'trainable':
-            params = {key[key.find('/') + 1:]: params[key] for key in params.keys()}
-
-            self.output_pos_enc.set_haiku_params(params.pop("trainable_position_encoding"))
 
         if len(params) != 0:
             warnings.warn(f"Some parameters couldn't be matched to model: {params.keys()}")
@@ -329,15 +283,26 @@ class Perceiver(nn.Module):
 
     def __init__(
             self,
-            encoder: PerceiverEncoder,
-            decoder: AbstractPerceiverDecoder,
+            num_blocks: int = 8,
+            num_self_attends_per_block: int = 6,
+            num_latents: int = 512,
+            num_latent_channels: int = 1024,
+            final_project: bool = True,
+            final_project_out_channels: int = None,
+            perceiver_encoder_kwargs: Dict = {},
+            perceiver_decoder_kwargs: Dict = {},
             input_preprocessors=None,
             output_postprocessors=None,
+            output_queries=None,
+            output_query_padding_channels: int = 0,
             input_padding_channels: int = 0,
             input_channels: dict = None,
             input_mask_probs: dict = None,
     ):
         super().__init__()
+
+        if final_project_out_channels is None:
+            final_project_out_channels = num_latent_channels
 
         # convert to ModuleDict to register all modules
         if type(input_preprocessors) is dict:
@@ -351,13 +316,6 @@ class Perceiver(nn.Module):
                                                           min_padding_size=input_padding_channels,
                                                           input_channels=input_channels)
 
-        # if input_preprocessors is not None:
-        #     # The number of channels to which all inputs are padded to make them compatible
-        #     self.common_input_channels = (
-        #                 max(m.n_output_channels() for m in input_preprocessors) + input_padding_channels)
-        # elif input_channels is not None:
-        #     self.common_input_channels = (max(m.input_channels() for m in input_channels) + input_padding_channels)
-
         # convert to ModuleDict to register all modules
         if type(output_postprocessors) is dict:
             output_postprocessors = nn.ModuleDict(output_postprocessors)
@@ -366,8 +324,42 @@ class Perceiver(nn.Module):
             output_postprocessors = nn.ModuleDict({"default": output_postprocessors})
         self._output_postprocessors = output_postprocessors
 
-        self._decoder = decoder
-        self._encoder = encoder
+        # convert to ModuleDict to register all modules
+        if type(output_queries) is dict:
+            output_queries = nn.ModuleDict(output_queries)
+        elif type(output_queries) is nn.Module:
+            # Single preprocessor
+            output_queries = nn.ModuleDict({"default": output_queries})
+        self._output_queries = output_queries
+
+        query_channels = (
+                    max(m.n_query_channels() for m in self._output_queries.values()) + output_query_padding_channels)
+        self.query_channels = query_channels
+
+        self.padding_embeddings = nn.ModuleDict()
+
+        # Use trainable encodings to pad all queries to the same number of channels.
+        for modality_name, query in self._output_queries.items():
+            pos = position_encoding.TrainablePositionEncoding(
+                index_dim=1,
+                num_channels=query_channels - query.n_query_channels(),
+                init_scale=0.02)
+            self.padding_embeddings[modality_name] = pos
+
+        self._encoder = PerceiverEncoder(
+            num_input_channels=self._multi_preprocessor.n_output_channels(),
+            num_blocks=num_blocks,
+            num_self_attends_per_block=num_self_attends_per_block,
+            num_latents=num_latents,
+            num_latent_channels=num_latent_channels,
+            **perceiver_encoder_kwargs)
+
+        self._decoder = PerceiverDecoder(
+            query_channels=query_channels,
+            final_project=final_project,
+            final_project_out_channels=final_project_out_channels,
+            num_latent_channels=num_latent_channels,
+            **perceiver_decoder_kwargs)
 
     def forward(self, inputs, *, subsampled_output_points=None,
                 pos=None, input_mask=None, query_mask=None):
@@ -387,7 +379,7 @@ class Perceiver(nn.Module):
 
         # Get the queries for encoder and decoder cross-attends.
         encoder_query = self._encoder.latents(inputs)
-        decoder_query = self._decoder.decoder_query(
+        decoder_query = self.decoder_query(
             inputs, modality_sizes, inputs_without_pos,
             subsampled_points=subsampled_output_points)
 
@@ -421,6 +413,46 @@ class Perceiver(nn.Module):
 
         return outputs
 
+    def decoder_query(self, inputs, modality_sizes, inputs_without_pos=None,
+                      subsampled_points=None):
+        # Partition the flat inputs among the different modalities
+        inputs = restructure(modality_sizes, inputs)
+        # Obtain modality-specific decoders' queries
+        subsampled_points = subsampled_points or dict()
+        decoder_queries = dict()
+        for modality, output_query in self._output_queries.items():
+            # Get input_without_pos for this modality if it exists.
+            input_without_pos = None
+            if inputs_without_pos is not None:
+                input_without_pos = inputs_without_pos.get(modality, None)
+            query = output_query(inputs[modality],
+                                 inputs_without_pos=input_without_pos,
+                                 subsampled_points=subsampled_points.get(modality, None))
+
+            query = query.reshape([query.shape[0], np.prod(query.shape[1:-1]), query.shape[-1]])
+
+            pos = self.padding_embeddings[modality](query.shape[0])
+
+            pos = torch.broadcast_to(pos, [query.shape[0], query.shape[1], self.query_channels - query.shape[2]])
+
+            query = torch.cat([query, pos], dim=2)
+
+            decoder_queries[modality] = query
+
+        # Apply a predictable ordering to the modalities
+        return torch.cat([
+            decoder_queries[modality]
+            for modality in sorted(decoder_queries.keys())
+        ], dim=1)
+
+    def set_haiku_params(self, params):
+        for modality in self.padding_embeddings.keys():
+            self.padding_embeddings[modality].set_haiku_params(params.pop(f"{modality}_padding"))
+
+        if len(params) != 0:
+            warnings.warn(f"Some parameters couldn't be matched to model: {params.keys()}")
+
+
 
 def restructure(modality_sizes: ModalitySizeT,
                 inputs: torch.Tensor) -> Mapping[str, torch.Tensor]:
@@ -441,152 +473,118 @@ def restructure(modality_sizes: ModalitySizeT,
         outputs[modality] = inp
     return outputs
 
+# class BasicVideoAutoencodingDecoder(AbstractPerceiverDecoder):
+#     """Cross-attention based video-autoencoding decoder.
+#
+#   Light-weight wrapper of `BasicDecoder` with video reshaping logic.
+#   """
+#
+#     def __init__(self,
+#                  output_shape,
+#                  position_encoding_type,
+#                  **decoder_kwargs):
+#         super().__init__()
+#         if len(output_shape) != 4:  # B, T, H, W
+#             raise ValueError(f'Expected rank 4 output_shape, got {output_shape}.')
+#         # Build the decoder components:
+#         self._output_shape = output_shape
+#         self._output_num_channels = decoder_kwargs['output_num_channels']
+#
+#         self.decoder = BasicDecoder(
+#             output_index_dims=self._output_shape[1:4],  # T*H*W
+#             position_encoding_type=position_encoding_type,
+#             **decoder_kwargs)
+#
+#     def decoder_query(self, inputs, modality_sizes=None,
+#                       inputs_without_pos=None, subsampled_points=None):
+#         return self.decoder.decoder_query(inputs,
+#                                           modality_sizes=modality_sizes,
+#                                           inputs_without_pos=inputs_without_pos,
+#                                           subsampled_points=subsampled_points)
+#
+#     def n_query_channels(self):
+#         return self.decoder.n_query_channels()
+#
+#     def output_shape(self, inputs):
+#         return ([inputs.shape[0]] + self._output_shape[1:] +
+#                 [self._output_num_channels], None)
+#
+#     def forward(self, query, latents, *, query_mask=None):
+#         output = self.decoder(query, latents)
+#
+#         output = torch.reshape(output, self._output_shape + [output.shape[-1]])
+#         return output
 
-class BasicVideoAutoencodingDecoder(AbstractPerceiverDecoder):
-    """Cross-attention based video-autoencoding decoder.
-
-  Light-weight wrapper of `BasicDecoder` with video reshaping logic.
-  """
-
-    def __init__(self,
-                 output_shape,
-                 position_encoding_type,
-                 **decoder_kwargs):
-        super().__init__()
-        if len(output_shape) != 4:  # B, T, H, W
-            raise ValueError(f'Expected rank 4 output_shape, got {output_shape}.')
-        # Build the decoder components:
-        self._output_shape = output_shape
-        self._output_num_channels = decoder_kwargs['output_num_channels']
-
-        self.decoder = BasicDecoder(
-            output_index_dims=self._output_shape[1:4],  # T*H*W
-            position_encoding_type=position_encoding_type,
-            **decoder_kwargs)
-
-    def decoder_query(self, inputs, modality_sizes=None,
-                      inputs_without_pos=None, subsampled_points=None):
-        return self.decoder.decoder_query(inputs,
-                                          modality_sizes=modality_sizes,
-                                          inputs_without_pos=inputs_without_pos,
-                                          subsampled_points=subsampled_points)
-
-    def n_query_channels(self):
-        return self.decoder.n_query_channels()
-
-    def output_shape(self, inputs):
-        return ([inputs.shape[0]] + self._output_shape[1:] +
-                [self._output_num_channels], None)
-
-    def forward(self, query, latents, *, query_mask=None):
-        output = self.decoder(query, latents)
-
-        output = torch.reshape(output, self._output_shape + [output.shape[-1]])
-        return output
-
-
-class MultimodalDecoder(AbstractPerceiverDecoder):
-    """Multimodal decoding by composing uni-modal decoders.
-
-  The modalities argument of the constructor is a dictionary mapping modality
-  name to the decoder of that modality. That decoder will be used to construct
-  queries for that modality. However, there is a shared cross attention across
-  all modalities, using the concatenated per-modality query vectors.
-  """
-
-    def __init__(self,
-                 modalities,
-                 num_outputs,
-                 output_num_channels,
-                 min_padding_size=2,
-                 subsampled_index_dims=None,
-                 **decoder_kwargs):
-        super().__init__()
-
-        if type(modalities) is dict:
-            modalities = nn.ModuleDict(modalities)
-
-        self._modalities = modalities
-        self._subsampled_index_dims = subsampled_index_dims
-        self._min_padding_size = min_padding_size
-        self._output_num_channels = output_num_channels
-        self._num_outputs = num_outputs
-
-        query_channels = (max(m.n_query_channels() for m in self._modalities.values()) + self._min_padding_size)
-        self.query_channels = query_channels
-
-        self.padding_embeddings = nn.ModuleDict()
-
-        # Use trainable encodings to pad all queries to the same number of channels.
-        for modality_name, modality in self._modalities.items():
-            pos = position_encoding.TrainablePositionEncoding(
-                index_dim=1,
-                num_channels=query_channels - modality.n_query_channels(),
-                init_scale=0.02)
-            self.padding_embeddings[modality_name] = pos
-
-        self._decoder = BasicDecoder(
-            query_channels=query_channels,
-            output_index_dims=(num_outputs,),
-            output_num_channels=output_num_channels,
-            position_encoding_type='none',
-            **decoder_kwargs)
-
-    def decoder_query(self, inputs, modality_sizes, inputs_without_pos=None,
-                      subsampled_points=None):
-        # Partition the flat inputs among the different modalities
-        inputs = restructure(modality_sizes, inputs)
-        # Obtain modality-specific decoders' queries
-        subsampled_points = subsampled_points or dict()
-        decoder_queries = dict()
-        for modality, decoder in self._modalities.items():
-            # Get input_without_pos for this modality if it exists.
-            input_without_pos = None
-            if inputs_without_pos is not None:
-                input_without_pos = inputs_without_pos.get(modality, None)
-            query = decoder.decoder_query(
-                inputs=inputs[modality],
-                modality_sizes=None,
-                inputs_without_pos=input_without_pos,
-                subsampled_points=subsampled_points.get(modality, None)
-            )
-
-            query = query.reshape([query.shape[0], np.prod(query.shape[1:-1]), query.shape[-1]])
-
-            pos = self.padding_embeddings[modality](query.shape[0])
-
-            pos = torch.broadcast_to(pos, [query.shape[0], query.shape[1], self.query_channels - query.shape[2]])
-
-            query = torch.cat([query, pos], dim=2)
-
-            decoder_queries[modality] = query
-
-        # Apply a predictable ordering to the modalities
-        return torch.cat([
-            decoder_queries[modality]
-            for modality in sorted(self._modalities.keys())
-        ], dim=1)
-
-    def output_shape(self, inputs):
-        if self._subsampled_index_dims is not None:
-            subsampled_index_dims = sum(self._subsampled_index_dims.values())
-        else:
-            subsampled_index_dims = self._num_outputs
-        return ((inputs.shape[0], subsampled_index_dims, self._output_num_channels),
-                self._subsampled_index_dims)
-
-    def forward(self, query, latents, *, query_mask=None):
-        # B x 1 x num_classes -> B x num_classes
-        return self._decoder(query, latents)
-
-    def set_haiku_params(self, params):
-        params = {key[key.find('/') + 1:]: params[key] for key in params.keys()}
-
-        decoder_params = {key[key.find('/') + 1:]: params.pop(key) for key in list(params.keys()) if
-                          key.startswith("basic_decoder")}
-        self._decoder.set_haiku_params(decoder_params)
-        for modality in self._modalities.keys():
-            self.padding_embeddings[modality].set_haiku_params(params.pop(f"{modality}_padding"))
-
-        if len(params) != 0:
-            warnings.warn(f"Some parameters couldn't be matched to model: {params.keys()}")
+#
+# class MultimodalDecoder(AbstractPerceiverDecoder):
+#     """Multimodal decoding by composing uni-modal decoders.
+#
+#   The modalities argument of the constructor is a dictionary mapping modality
+#   name to the decoder of that modality. That decoder will be used to construct
+#   queries for that modality. However, there is a shared cross attention across
+#   all modalities, using the concatenated per-modality query vectors.
+#   """
+#
+#     def __init__(self,
+#                  modalities,
+#                  num_outputs,
+#                  output_num_channels,
+#                  min_padding_size=2,
+#                  subsampled_index_dims=None,
+#                  **decoder_kwargs):
+#         super().__init__()
+#
+#         if type(modalities) is dict:
+#             modalities = nn.ModuleDict(modalities)
+#
+#         self._modalities = modalities
+#         self._subsampled_index_dims = subsampled_index_dims
+#         self._min_padding_size = min_padding_size
+#         self._output_num_channels = output_num_channels
+#         self._num_outputs = num_outputs
+#
+#         query_channels = (max(m.n_query_channels() for m in self._modalities.values()) + self._min_padding_size)
+#         self.query_channels = query_channels
+#
+#         self.padding_embeddings = nn.ModuleDict()
+#
+#         # Use trainable encodings to pad all queries to the same number of channels.
+#         for modality_name, modality in self._modalities.items():
+#             pos = position_encoding.TrainablePositionEncoding(
+#                 index_dim=1,
+#                 num_channels=query_channels - modality.n_query_channels(),
+#                 init_scale=0.02)
+#             self.padding_embeddings[modality_name] = pos
+#
+#         self._decoder = BasicDecoder(
+#             query_channels=query_channels,
+#             output_index_dims=(num_outputs,),
+#             output_num_channels=output_num_channels,
+#             position_encoding_type='none',
+#             **decoder_kwargs)
+#
+#
+#
+#     def output_shape(self, inputs):
+#         if self._subsampled_index_dims is not None:
+#             subsampled_index_dims = sum(self._subsampled_index_dims.values())
+#         else:
+#             subsampled_index_dims = self._num_outputs
+#         return ((inputs.shape[0], subsampled_index_dims, self._output_num_channels),
+#                 self._subsampled_index_dims)
+#
+#     def forward(self, query, latents, *, query_mask=None):
+#         # B x 1 x num_classes -> B x num_classes
+#         return self._decoder(query, latents)
+#
+#     def set_haiku_params(self, params):
+#         params = {key[key.find('/') + 1:]: params[key] for key in params.keys()}
+#
+#         decoder_params = {key[key.find('/') + 1:]: params.pop(key) for key in list(params.keys()) if
+#                           key.startswith("basic_decoder")}
+#         self._decoder.set_haiku_params(decoder_params)
+#         for modality in self._modalities.keys():
+#             self.padding_embeddings[modality].set_haiku_params(params.pop(f"{modality}_padding"))
+#
+#         if len(params) != 0:
+#             warnings.warn(f"Some parameters couldn't be matched to model: {params.keys()}")

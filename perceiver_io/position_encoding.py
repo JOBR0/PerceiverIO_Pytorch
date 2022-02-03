@@ -4,6 +4,7 @@ import abc
 import functools
 import math
 import warnings
+from enum import Enum
 
 import numpy as np
 import torch
@@ -11,6 +12,12 @@ import torch.nn as nn
 from timm.models.layers import trunc_normal_, lecun_normal_
 
 from utils.utils import init_linear_from_haiku
+
+
+class PosEncodingType(Enum):
+    FOURIER = 1
+    TRAINABLE = 2
+    NONE = 3
 
 
 def generate_fourier_features(
@@ -101,7 +108,9 @@ class AbstractPositionEncoding(nn.Module, metaclass=abc.ABCMeta):
 class TrainablePositionEncoding(AbstractPositionEncoding):
     """Trainable position encoding."""
 
-    def __init__(self, index_dim, num_channels: int = 128, init_scale: float = 0.02):
+    def __init__(self, index_dim,
+                 num_channels: int = 128,
+                 init_scale: float = 0.02):
         super().__init__()
         # size = list(index_dim) + [num_channels]
         self.pos_embs = nn.Parameter(torch.zeros((index_dim, num_channels)))
@@ -222,13 +231,13 @@ def build_position_encoding(
         fourier_position_encoding_kwargs=None):
     """Builds the position encoding."""
 
-    if position_encoding_type == 'trainable':
+    if position_encoding_type == PosEncodingType.TRAINABLE:
         assert trainable_position_encoding_kwargs is not None
         output_pos_enc = TrainablePositionEncoding(
             # Construct 1D features:
             index_dim=np.prod(index_dims),
             **trainable_position_encoding_kwargs)
-    elif position_encoding_type == 'fourier':
+    elif position_encoding_type == PosEncodingType.FOURIER:
         assert fourier_position_encoding_kwargs is not None
         output_pos_enc = FourierPositionEncoding(
             index_dims=index_dims,

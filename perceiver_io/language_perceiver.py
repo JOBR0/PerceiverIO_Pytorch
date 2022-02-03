@@ -10,7 +10,7 @@ from perceiver_io.io_processors import EmbeddingDecoder
 from perceiver_io.perceiver import PerceiverEncoder, Perceiver
 
 
-from perceiver_io.perceiver import AbstractPerceiverDecoder, BasicDecoder
+from perceiver_io.perceiver import PerceiverDecoder
 from perceiver_io.position_encoding import TrainablePositionEncoding
 from utils.utils import init_embedding_from_haiku
 
@@ -41,9 +41,9 @@ class LanguagePerceiver(nn.Module):
             cross_attend_widening_factor=1,
             self_attend_widening_factor=1)
 
-        decoder = BasicDecoder(
+        decoder = PerceiverDecoder(
             query_channels=embed_dim,  # TODO change
-            output_num_channels=latent_channels,
+            final_project_out_channels=latent_channels,
             position_encoding_type='trainable',
             output_index_dims=max_seq_len,
             num_latent_channels=latent_channels,

@@ -6,7 +6,7 @@ from typing import Sequence
 import torch.nn as nn
 import torch
 
-from perceiver_io.perceiver import PerceiverEncoder, Perceiver, AbstractPerceiverDecoder, BasicDecoder
+from perceiver_io.perceiver import PerceiverEncoder, Perceiver, PerceiverDecoder
 from perceiver_io import io_processors
 from timm.models.layers import to_2tuple
 
@@ -215,7 +215,7 @@ class FlowPerceiver(nn.Module):
         return output
 
 
-class FlowDecoder(AbstractPerceiverDecoder):
+class FlowDecoder(nn.Module):
     """Cross-attention based flow decoder.
     Args:
         query_channels (int): Number of channels in the query for cross-attention. This should correspond to
@@ -240,10 +240,10 @@ class FlowDecoder(AbstractPerceiverDecoder):
         self._output_image_shape = output_img_size
         self._output_num_channels = output_num_channels
         self._rescale_factor = rescale_factor
-        self.decoder = BasicDecoder(
+        self.decoder = PerceiverDecoder(
             num_latent_channels=num_latent_channels,
             query_channels=query_channels,
-            output_num_channels=output_num_channels,
+            final_project_out_channels=output_num_channels,
             **decoder_kwargs)
 
     def output_shape(self, inputs):

@@ -7,10 +7,10 @@ import torch
 
 import numpy as np
 
-from perceiver_io.classification_perceiver import ClassificationDecoder
-from perceiver_io.perceiver import PerceiverEncoder, Perceiver, BasicDecoder, \
-    BasicVideoAutoencodingDecoder, MultimodalDecoder
+from perceiver_io.output_queries import FourierQuery, TrainableQuery
+from perceiver_io.perceiver import Perceiver
 from perceiver_io import io_processors
+from perceiver_io.position_encoding import PosEncodingType
 
 
 class MultiModalPerceiver(nn.Module):
@@ -40,7 +40,7 @@ class MultiModalPerceiver(nn.Module):
         input_preprocessors = {
             "audio": io_processors.AudioPreprocessor(
                 samples_per_batch=n_audio_samples,
-                position_encoding_type="fourier",
+                position_encoding_type=PosEncodingType.FOURIER,
                 fourier_position_encoding_kwargs=dict(
                     num_bands=192,
                     max_resolution=(n_audio_samples,),
@@ -54,7 +54,7 @@ class MultiModalPerceiver(nn.Module):
                 img_size=(self.H, self.W),
                 input_channels=img_channels,
                 num_frames=num_frames,
-                position_encoding_type="fourier",
+                position_encoding_type=PosEncodingType.FOURIER,
                 fourier_position_encoding_kwargs=dict(
                     num_bands=32,
                     max_resolution=(num_frames, self.H // 4, self.W // 4),
@@ -83,92 +83,104 @@ class MultiModalPerceiver(nn.Module):
                 num_classes=num_classes),
         }
 
-        # encoder_input_channels = input_preprocessor.n_output_channels()
+        image_out_query = FourierQuery(
+            concat_preprocessed_input=False,
+            output_index_dims=(5, self.H, self.W),  # TODO change#images.shape[:4],
+            num_bands=32,
+            max_resolution=(num_frames, self.H // 4, self.W // 4),
+            sine_only=False,
+            concat_pos=True,
+        )
 
-        encoder = PerceiverEncoder(
-            num_input_channels=704,
+        audio_out_query = FourierQuery(
+            concat_preprocessed_input=False,
+            output_index_dims = (n_audio_samples // self.audio_samples_per_patch,),
+            num_bands=192,
+            max_resolution=(n_audio_samples,),
+            sine_only=False,
+            concat_pos=True, )
+
+        label_out_query = TrainableQuery(
+            output_index_dims=(1,),
+            concat_preprocessed_input=False,
+            num_channels=1024,#TODO check
+            init_scale=0.02)
+
+        output_queries = {
+            "audio": audio_out_query,
+            "image": image_out_query,
+            "label": label_out_query, }
+
+        # image_decoder = BasicVideoAutoencodingDecoder(
+        #     # Autoencoding, don"t pass inputs to the queries.
+        #     concat_preprocessed_input=False,
+        #     # subsampled_index_dims=subsampling["image"], #TODO needed?
+        #     output_shape=(5, 3, 224, 224),  # TODO change#images.shape[:4],
+        #
+        #     position_encoding_type="fourier",
+        #     fourier_position_encoding_kwargs=dict(
+        #         num_bands=32,
+        #         max_resolution=(num_frames, self.H // 4, self.W // 4),
+        #         sine_only=False,
+        #         concat_pos=True,
+        #     ),
+        # )
+
+        # TODO change
+        subsampled_index_dims = 1
+
+        # decoder = MultimodalDecoder(
+        #     # Autoencoding, don"t pass inputs to the queries.
+        #     concat_preprocessed_input=False,
+        #     # subsampled_index_dims=subsampled_index_dims,# TODO needed?
+        #     # Modality specific decoders are used ONLY to generate queries.
+        #     # All modalties are decoded together using a unified decoder.
+        #     modalities={
+        #         "audio": BasicDecoder(
+        #             # Autoencoding, don"t pass inputs to the queries.
+        #             concat_preprocessed_input=False,
+        #             # subsampled_index_dims=subsampling["audio"],#TODO needed?
+        #             output_index_dims=(n_audio_samples // self.audio_samples_per_patch,),
+        #             num_latent_channels=1024,  # TODO check why does it differ from encoder
+        #             output_num_channels=512,
+        #             use_query_residual=False,
+        #             position_encoding_type="fourier",
+        #             fourier_position_encoding_kwargs=dict(
+        #                 num_bands=192,
+        #                 max_resolution=(n_audio_samples,),
+        #                 sine_only=False,
+        #                 concat_pos=True,
+        #             ),
+        #         ),
+        #         "image": image_decoder,
+        #         "label": ClassificationDecoder(
+        #             # Autoencoding, don"t pass inputs to the queries.
+        #             concat_preprocessed_input=False,
+        #
+        #
+        #             position_encoding_type="trainable",
+        #             trainable_position_encoding_kwargs=dict(
+        #                 num_channels=1024,
+        #                 init_scale=0.02,
+        #             ),
+        #         ),
+        #     },
+        #     num_outputs=None,
+        #     output_num_channels=512,
+        #     num_latent_channels=num_latent_channels,
+        #     use_query_residual=False)
+
+        self.perceiver = Perceiver(
             num_self_attends_per_block=8,
             # Weights won"t be shared if num_blocks is set to 1.
             num_blocks=1,
             num_latents=28 * 28 * 1,
             num_latent_channels=num_latent_channels,
-            num_cross_attend_heads=1,
-            num_self_attend_heads=8,
-            cross_attend_widening_factor=1,
-            self_attend_widening_factor=1,
-            dropout_prob=0.0,
-            latent_pos_enc_init_scale=0.02,
-            cross_attention_shape_for_attn="kv")
-
-        image_decoder = BasicVideoAutoencodingDecoder(
-            # Autoencoding, don"t pass inputs to the queries.
-            concat_preprocessed_input=False,
-            # subsampled_index_dims=subsampling["image"], #TODO needed?
-            output_shape=(5, 3, 224, 224),  # TODO change#images.shape[:4],
-            num_latent_channels=1024,  # TODO check why does it differ from encoder
-            output_num_channels=512,
-            use_query_residual=False,
-            position_encoding_type="fourier",
-            fourier_position_encoding_kwargs=dict(
-                num_bands=32,
-                max_resolution=(num_frames, self.H // 4, self.W // 4),
-                sine_only=False,
-                concat_pos=True,
-            ),
-        )
-
-        # TODO change
-        subsampled_index_dims = 1
-
-        decoder = MultimodalDecoder(
-            # Autoencoding, don"t pass inputs to the queries.
-            concat_preprocessed_input=False,
-            # subsampled_index_dims=subsampled_index_dims,# TODO needed?
-            # Modality specific decoders are used ONLY to generate queries.
-            # All modalties are decoded together using a unified decoder.
-            modalities={
-                "audio": BasicDecoder(
-                    # Autoencoding, don"t pass inputs to the queries.
-                    concat_preprocessed_input=False,
-                    # subsampled_index_dims=subsampling["audio"],#TODO needed?
-                    output_index_dims=(n_audio_samples // self.audio_samples_per_patch,),
-                    num_latent_channels=1024,  # TODO check why does it differ from encoder
-                    output_num_channels=512,
-                    use_query_residual=False,
-                    position_encoding_type="fourier",
-                    fourier_position_encoding_kwargs=dict(
-                        num_bands=192,
-                        max_resolution=(n_audio_samples,),
-                        sine_only=False,
-                        concat_pos=True,
-                    ),
-                ),
-                "image": image_decoder,
-                "label": ClassificationDecoder(
-                    # Autoencoding, don"t pass inputs to the queries.
-                    concat_preprocessed_input=False,
-                    num_classes=num_classes,
-                    num_latent_channels=1024,  # TODO check why does it differ from encoder
-                    use_query_residual=False,
-                    final_project=False,
-                    position_encoding_type="trainable",
-                    trainable_position_encoding_kwargs=dict(
-                        num_channels=1024,
-                        init_scale=0.02,
-                    ),
-                ),
-            },
-            num_outputs=None,
-            output_num_channels=512,
-            num_latent_channels=num_latent_channels,
-            use_query_residual=False)
-
-        self.perceiver = Perceiver(
             input_preprocessors=input_preprocessors,
-            encoder=encoder,
-            decoder=decoder,
             output_postprocessors=output_postprocessors,
+            output_queries=output_queries,
             input_padding_channels=4,
+            output_query_padding_channels=2,
             input_mask_probs={"image": 0.0, "audio": 0.0, "label": 1.0}, )
 
     def load_haiku_params(self, file):
@@ -181,8 +193,13 @@ class MultiModalPerceiver(nn.Module):
 
             multimodal_decoder_params = {key[key.find("/") + 1:]: params.pop(key) for key in list(params.keys()) if
                                          key.startswith("multimodal_decoder")}
+            multimodal_decoder_params = {key[key.find('/') + 1:]: multimodal_decoder_params[key] for key in multimodal_decoder_params.keys()}
 
-            self.perceiver._decoder.set_haiku_params(multimodal_decoder_params)
+            basic_decoder_params = {key[key.find("/") + 1:]: multimodal_decoder_params.pop(key) for key in list(multimodal_decoder_params.keys()) if
+                                         key.startswith("basic_decoder")}
+            self.perceiver._decoder.set_haiku_params(basic_decoder_params)
+            self.perceiver.set_haiku_params(multimodal_decoder_params)
+
 
             preprocessor_params = {key[key.find("/") + 1:]: params.pop(key) for key in list(params.keys()) if
                                    key.startswith("multimodal_preprocessor")}
@@ -192,7 +209,8 @@ class MultiModalPerceiver(nn.Module):
             classification_decoder_params = {key[key.find("/") + 1:]: params.pop(key) for key in list(params.keys()) if
                                              key.startswith("classification_decoder")}
 
-            self.perceiver._decoder._modalities["label"].set_haiku_params(classification_decoder_params)
+            self.perceiver._output_queries["label"].set_haiku_params(classification_decoder_params)
+
 
             projection_postprocessor_params = {key[key.find("/") + 1:]: params.pop(key) for key in list(params.keys())
                                                if
