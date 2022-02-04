@@ -97,7 +97,8 @@ with torch.inference_mode():
 
 from utils.utils import dump_pickle
 
-dump_pickle(reconstruction, "temp/output_torch_orgfour.pickle")
+output_torch = {k: reconstruction[k].numpy() for k in reconstruction.keys()}
+dump_pickle(output_torch, "temp/output_multi_torch.pickle")
 
 
 # Visualize reconstruction of first 16 frames

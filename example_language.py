@@ -5,12 +5,15 @@ import numpy as np
 
 from perceiver_io.language_perceiver import LanguagePerceiver
 from utils.bytes_tokenizer import BytesTokenizer
+from utils.utils import dump_pickle
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 tokenizer = BytesTokenizer()
 
 perceiver = LanguagePerceiver(vocab_size=tokenizer.vocab_size)
+perceiver.to(device)
+perceiver.eval()
 
 ckpt_file = "./pytorch_checkpoints/language_perceiver_io_bytes.pth"
 
@@ -62,6 +65,8 @@ input_mask = torch.from_numpy(input_mask).bool()
 # Predict
 with torch.inference_mode():
     out = perceiver(inputs, input_masks=input_mask)
+
+dump_pickle(out.numpy(), "temp/output_language_torch.pickle")
 
 masked_tokens_predictions = out[0, 51:60].argmax(axis=-1)
 print("Greedy predictions:")
