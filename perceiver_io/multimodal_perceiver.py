@@ -86,7 +86,7 @@ class MultiModalPerceiver(nn.Module):
 
         image_out_query = FourierQuery(
             concat_preprocessed_input=False,
-            output_index_dims=(5, self.H, self.W),  # TODO change#images.shape[:4],
+            output_index_dims=(num_frames, self.H, self.W),
             num_bands=32,
             max_resolution=(num_frames, self.H // 4, self.W // 4),
             sine_only=False,
