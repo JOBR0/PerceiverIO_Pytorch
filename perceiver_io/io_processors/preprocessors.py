@@ -306,8 +306,6 @@ class OneHotPreprocessor(nn.Module):
         # Add a dummy index dimension.
         inputs = inputs[:, None, :]
 
-        # TODO whats the point of this?
-
         # No position encodings, so the 1st (input) and 2nd (inputs_without_pos)
         # outputs are identical.
         return inputs, inputs
@@ -337,7 +335,6 @@ class AudioPreprocessor(nn.Module):
         self._samples_per_patch = samples_per_patch
         self._concat_or_add_pos = concat_or_add_pos
 
-        # TODO check
         self.index_dims = [samples_per_batch // samples_per_patch]
 
         self._positional_encoding = position_encoding.build_position_encoding(
@@ -376,7 +373,6 @@ class AudioPreprocessor(nn.Module):
         pos_enc = self._positional_encoding(batch_size=batch_size, pos=pos).to(inputs.device)
 
         for i in range(0, self._n_extra_pos_mlp):
-            # TODO check how this makes it deeper
             pos_enc = pos_enc + self._extra_pos_mlps[i](pos_enc.shape[-1])(pos_enc)
             if i < (self._n_extra_pos_mlp - 1):
                 pos_enc = F.relu(pos_enc)

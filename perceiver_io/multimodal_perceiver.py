@@ -81,7 +81,6 @@ class MultiModalPerceiver(nn.Module):
                 num_outputs=3),
             "label": ClassificationPostprocessor(
                 num_input_channels=512,
-                # todo check what"s the point of this postprocessor combined with classification decoder
                 num_classes=num_classes),
         }
 
