@@ -56,9 +56,8 @@ video_path = "./sample_data/video.avi"
 video = load_video(video_path)
 
 # Visualize inputs
-#show_animation(video)
+#show_animation(video) #TODO uncomment
 
-# @title Model construction
 NUM_FRAMES = 16
 AUDIO_SAMPLES_PER_FRAME = 48000 // 25
 SAMPLES_PER_PATCH = 16
@@ -98,14 +97,14 @@ with torch.inference_mode():
 from utils.utils import dump_pickle
 
 output_torch = {k: reconstruction[k].cpu().numpy() for k in reconstruction.keys()}
-dump_pickle(output_torch, "temp/output_multi_torch.pickle")
+dump_pickle(output_torch, "temp/output_multi_torch.pickle") #TODO remove
 
 
 # Visualize reconstruction of first 16 frames
-show_animation(reconstruction["image"][0].cpu())
+show_animation(np.clip(reconstruction["image"][0].cpu().numpy(), 0, 1))
 
 # Kinetics 700 Labels
-scores, indices = torch.top_k(F.softmax(reconstruction["label"]), 5)
+scores, indices = torch.topk(F.softmax(reconstruction["label"]), 5)
 
 for score, index in zip(scores[0], indices[0]):
     print("%s: %s" % (KINETICS_CLASSES[index], score))
@@ -124,7 +123,11 @@ audio_chunks = np.reshape(audio[:nframes * AUDIO_SAMPLES_PER_FRAME],
 with torch.inference_mode():
     reconstruction = {"image": [], "audio": [], "label": None}
     for i in range(nframes // 16):
-        output = perceiver(video_chunks[None, i], audio_chunks[None, i, :, 0:1])
+        print(f"Processing chunk {i}/{nframes // 16}")
+        video_input = torch.from_numpy(video_chunks[None, i]).float().to(device)
+        audio_input = torch.from_numpy(audio_chunks[None, i, :, 0:1]).float().to(device)
+        output = perceiver(video_input, audio_input)
+        #output = perceiver(video_chunks[None, i], audio_chunks[None, i, :, 0:1])
 
         reconstruction["image"].append(output["image"])
         reconstruction["audio"].append(output["audio"])
@@ -137,4 +140,4 @@ with torch.inference_mode():
 
 
 # Visualize reconstruction of entire video
-show_animation(reconstruction["image"][0])
+show_animation(np.clip(reconstruction["image"][0].cpu().numpy(), 0, 1))
