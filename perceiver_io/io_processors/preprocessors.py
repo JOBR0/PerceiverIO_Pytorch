@@ -13,11 +13,52 @@ import torch.nn.functional as F
 
 from perceiver_io import position_encoding
 from perceiver_io.io_processors.processor_utils import PreprocessorOutputT, Conv2DDownsample, space_to_depth
-from perceiver_io.position_encoding import PosEncodingType
+from perceiver_io.position_encoding import PosEncodingType, TrainablePositionEncoding
 from utils.utils import conv_output_shape, init_linear_from_haiku, same_padding, init_conv_from_haiku, \
-    init_batchnorm_from_haiku
+    init_batchnorm_from_haiku, init_embedding_from_haiku
 
 
+class EmbeddingPreprocessor(nn.Module):
+    """Preprocessor for Language Embedding."""
+
+    def __init__(self,
+                 vocab_size: int,
+                 max_seq_len: int,
+                 embedding_dims: int):
+        super().__init__()
+
+        self.input_pos_encoding = TrainablePositionEncoding(
+            index_dim=max_seq_len,
+            num_channels=embedding_dims)
+
+        self.embed = nn.Embedding(num_embeddings=vocab_size,
+                                  embedding_dim=embedding_dims)
+
+        self._output_channels = embedding_dims
+
+    def n_output_channels(self):
+        return self._output_channels
+
+    def forward(self, inputs: torch.Tensor, *,
+                pos: Optional[torch.Tensor] = None,
+                network_input_is_1d: bool = True) -> PreprocessorOutputT:
+        batch_size = inputs.shape[0]
+
+        embedding_inputs = self.embed(inputs)
+
+        input_pos_encoding = self.input_pos_encoding(batch_size)
+
+        embeddings_with_pos_encoding = embedding_inputs + input_pos_encoding
+
+        return embeddings_with_pos_encoding, embedding_inputs
+
+    def set_haiku_params(self, params):
+        self.input_pos_encoding.set_haiku_params(params.pop("trainable_position_encoding"))
+
+        init_embedding_from_haiku(self.embed, params.pop("embed"))
+
+        if len(params) != 0:
+            warnings.warn(f"Some parameters couldn't be matched to model: {params.keys()}")
 
 
 class ImagePreprocessor(nn.Module):
@@ -232,6 +273,7 @@ class ImagePreprocessor(nn.Module):
 
         if len(position_encoding_projector) > 0:
             if self._position_encoding_type == PosEncodingType.TRAINABLE:
+                #TODO check why this has 2 parameters
                 self._positional_encoding.set_haiku_params(position_encoding_projector,
                                                            params.pop("trainable_position_encoding"))
             else:

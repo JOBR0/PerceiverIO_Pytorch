@@ -11,11 +11,39 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from perceiver_io import position_encoding
-from perceiver_io.io_processors.processor_utils import ModalitySizeT
+from perceiver_io.io_processors.processor_utils import ModalitySizeT, reverse_space_to_depth
 from perceiver_io.position_encoding import PosEncodingType
 from utils.utils import conv_output_shape, init_linear_from_haiku, same_padding, init_conv_from_haiku, \
-    init_batchnorm_from_haiku
+    init_batchnorm_from_haiku, init_embedding_from_haiku
 
+
+class EmbeddingPostprocessor(nn.Module):
+    """Pytorech module to decode embeddings."""
+
+    def __init__(self, embedding: nn.Embedding):
+        """Constructs the module.
+    Args:
+      embedding: Embedding module to use.
+    """
+        super().__init__()
+        self._embedding = embedding
+        self._vocab_size, self._d_model = embedding.weight.shape
+        self.bias = nn.Parameter(torch.zeros(self._vocab_size))
+
+    def forward(
+            self, inputs: torch.Tensor, *,
+            pos: Optional[torch.Tensor] = None,
+            modality_sizes: Optional[ModalitySizeT] = None) -> torch.Tensor:
+        batch_size, seq_len, _ = inputs.shape
+        output = torch.matmul(
+            inputs.reshape([-1, self._d_model]),  # Flatten batch dim
+            self._embedding.weight.T)
+        output = output + self.bias
+        return output.reshape([batch_size, seq_len, self._vocab_size])
+
+    def set_haiku_params(self, params):
+        with torch.no_grad():
+            self.bias.copy_(torch.from_numpy(params["bias"]).float())
 
 
 class ImagePostprocessor(nn.Module):
@@ -60,6 +88,7 @@ class ImagePostprocessor(nn.Module):
                 raise ValueError('Expected value for n_outputs')
             if self._temporal_upsample != 1:
                 raise NotImplementedError
+
                 def int_log2(x):
                     return int(np.round(np.log(x) / np.log(2)))
 
@@ -105,11 +134,6 @@ class ImagePostprocessor(nn.Module):
         return inputs
 
 
-
-
-
-
-
 class AudioPostprocessor(nn.Module):
     """Audio postprocessing for Perceiver."""
 
@@ -152,10 +176,6 @@ class IdentityPostprocessor(nn.Module):
                 pos: Optional[torch.Tensor] = None,
                 modality_sizes: Optional[ModalitySizeT] = None) -> torch.Tensor:
         return inputs
-
-
-
-
 
 
 class ClassificationPostprocessor(nn.Module):
@@ -207,6 +227,7 @@ class ProjectionPostprocessor(nn.Module):
         init_linear_from_haiku(self.projection, params.pop("linear"))
         if len(params) != 0:
             warnings.warn(f"Some parameters couldn't be matched to model: {params.keys()}")
+
 
 class FlowPostprocessor(nn.Module):
     """Flow postprocessing for Perceiver."""

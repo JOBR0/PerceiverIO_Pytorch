@@ -307,33 +307,3 @@ class Conv3DUpsample(nn.Module):
 
         return x
 
-
-
-
-
-
-
-class EmbeddingDecoder(nn.Module):
-    """Pytorech module to decode embeddings."""
-
-    def __init__(self, embedding: nn.Embedding):
-        """Constructs the module.
-    Args:
-      embedding: Embedding module to use.
-    """
-        super().__init__()
-        self._embedding = embedding
-        self._vocab_size, self._d_model = embedding.weight.shape
-        self.bias = nn.Parameter(torch.zeros(self._vocab_size))
-
-    def forward(self, embeddings: torch.Tensor) -> torch.Tensor:
-        batch_size, seq_len, _ = embeddings.shape
-        output = torch.matmul(
-            embeddings.reshape([-1, self._d_model]),  # Flatten batch dim
-            self._embedding.weight.T)
-        output = output + self.bias
-        return output.reshape([batch_size, seq_len, self._vocab_size])
-
-    def set_haiku_params(self, params):
-        with torch.no_grad():
-            self.bias.copy_(torch.from_numpy(params["bias"]).float())

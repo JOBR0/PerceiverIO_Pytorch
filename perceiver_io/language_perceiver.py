@@ -1,15 +1,13 @@
 import pickle
 import warnings
 
-
 import torch.nn as nn
 import torch
 
-
-from perceiver_io.io_processors.processor_utils import EmbeddingDecoder
+from perceiver_io.io_processors.postprocessors import EmbeddingPostprocessor
+from perceiver_io.io_processors.preprocessors import EmbeddingPreprocessor
 from perceiver_io.output_queries import TrainableQuery
-from perceiver_io.perceiver import PerceiverEncoder, Perceiver
-
+from perceiver_io.perceiver import  Perceiver
 
 from perceiver_io.perceiver import PerceiverDecoder
 from perceiver_io.position_encoding import TrainablePositionEncoding
@@ -24,7 +22,7 @@ class LanguagePerceiver(nn.Module):
     def __init__(self,
                  vocab_size: int = 262,
                  max_seq_len: int = 2048,
-                 latent_channels = 1280,
+                 latent_channels=1280,
                  embed_dim: int = 768):
         super().__init__()
 
@@ -33,12 +31,12 @@ class LanguagePerceiver(nn.Module):
             num_cross_attend_heads=8,
             qk_channels=8 * 32,
             v_channels=latent_channels,
-            use_query_residual=True,)
+            use_query_residual=True, )
 
-        #perceiver_decoder_kwargs = dict(
+        # perceiver_decoder_kwargs = dict(
 
         perceiver_decoder_kwargs = dict(
-            #query_channels=embed_dim,  # TODO change
+            # query_channels=embed_dim,  # TODO change
             qk_channels=8 * 32,
             v_channels=embed_dim,
             num_heads=8,
@@ -46,31 +44,29 @@ class LanguagePerceiver(nn.Module):
         )
 
         output_query = TrainableQuery(
-            output_index_dims= max_seq_len,
+            output_index_dims=max_seq_len,
             num_channels=embed_dim,
         )
 
+        input_preprocessor = EmbeddingPreprocessor(
+            vocab_size=vocab_size,
+            max_seq_len=max_seq_len,
+            embedding_dims=embed_dim,
+        )
+        output_postprocessor = EmbeddingPostprocessor(input_preprocessor.embed)
+
         self.perceiver = Perceiver(
             final_project=False,
-            input_channels=embed_dim,
             num_self_attends_per_block=26,
             num_blocks=1,
             num_latents=256,
             num_latent_channels=latent_channels,
-            input_preprocessors=None,
+            input_preprocessors=input_preprocessor,
+            output_postprocessors=output_postprocessor,
             perceiver_encoder_kwargs=perceiver_encoder_kwargs,
             perceiver_decoder_kwargs=perceiver_decoder_kwargs,
-            output_queries=output_query,
-            output_postprocessors=None)
+            output_queries=output_query)
 
-        self.input_pos_encoding = TrainablePositionEncoding(
-            index_dim=max_seq_len, num_channels=embed_dim)
-
-        self.embed = nn.Embedding(num_embeddings=vocab_size,
-                                  embedding_dim=embed_dim)
-
-        # TODO check this
-        self.emebdding_decoder = EmbeddingDecoder(self.embed)
 
 
     def load_haiku_params(self, file):
@@ -85,33 +81,26 @@ class LanguagePerceiver(nn.Module):
             decoder_params = {key[key.find('/') + 1:]: params.pop(key) for key in list(params.keys()) if
                               key.startswith("basic_decoder")}
             query_params = {key: decoder_params.pop(key) for key in list(decoder_params.keys()) if
-                              key.startswith("~")}
-
+                            key.startswith("~")}
 
             self.perceiver._output_queries["default"].set_haiku_params(query_params)
 
             self.perceiver._decoder.set_haiku_params(decoder_params)
 
-            self.input_pos_encoding.set_haiku_params(params.pop("trainable_position_encoding"))
+            self.perceiver._output_postprocessors["default"].set_haiku_params(params.pop("embedding_decoder"))
 
-            self.emebdding_decoder.set_haiku_params(params.pop("embedding_decoder"))
 
-            init_embedding_from_haiku(self.embed, params.pop("embed"))
+            self.perceiver._multi_preprocessor._preprocessors["default"].set_haiku_params(params)
+
+
+
+
+            #init_embedding_from_haiku(self.embed, params.pop("embed"))
 
             if len(params) != 0:
                 warnings.warn(f"Some parameters couldn't be matched to model: {params.keys()}")
 
     def forward(self, inputs: torch.Tensor, input_masks: torch.Tensor):
         """"""
-        embedding_inputs = self.embed(inputs)
-
-        batch_size = embedding_inputs.shape[0]
-        input_pos_encoding = self.input_pos_encoding(batch_size)
-
-        embedding_inputs = embedding_inputs + input_pos_encoding
-
-        output_embeddings = self.perceiver(embedding_inputs, input_mask=input_masks, query_mask=input_masks)
-
-        logits = self.emebdding_decoder(output_embeddings)
-
+        logits = self.perceiver(inputs, input_mask=input_masks, query_mask=input_masks)
         return logits
