@@ -153,10 +153,10 @@ def init_layer_norm_from_haiku(layer_norm: torch.nn.LayerNorm, haiku_params):
 
 
 def init_conv_from_haiku(conv_layer: torch.nn.Conv2d, haiku_params):
-    # TODO check if transpose is needed
     with torch.no_grad():
-        conv_layer.weight.copy_(torch.from_numpy(haiku_params["w"].T).float())
+        conv_layer.weight.copy_(torch.from_numpy(haiku_params["w"].T.swapaxes(-1,-2)).float())
         if "b" in haiku_params:
+            # TODO check if transpose is needed (not relevant for orignal models)
             conv_layer.bias.copy_(torch.from_numpy(haiku_params["b"].T).float())
         else:
             assert conv_layer.bias is None, "Bias is missing from Haiku model"
