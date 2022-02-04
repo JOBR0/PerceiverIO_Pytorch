@@ -104,7 +104,7 @@ dump_pickle(output_torch, "temp/output_multi_torch.pickle") #TODO remove
 show_animation(np.clip(reconstruction["image"][0].cpu().numpy(), 0, 1))
 
 # Kinetics 700 Labels
-scores, indices = torch.topk(F.softmax(reconstruction["label"]), 5)
+scores, indices = torch.topk(F.softmax(reconstruction["label"], dim=-1), 5)
 
 for score, index in zip(scores[0], indices[0]):
     print("%s: %s" % (KINETICS_CLASSES[index], score))
