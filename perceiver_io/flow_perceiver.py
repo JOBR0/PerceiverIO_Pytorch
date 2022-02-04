@@ -33,7 +33,7 @@ class FlowPerceiver(nn.Module):
     def __init__(
             self,
             img_size: Sequence[int] = (368, 496),
-            flow_scale_factor: int = 100/20,
+            flow_scale_factor: int = 20/100,
             n_latents: int = 2048,
             num_latent_channels=512,
             n_self_attends: int = 24,
