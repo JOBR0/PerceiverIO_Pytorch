@@ -149,7 +149,7 @@ class Attention(nn.Module):
             # Use large_k instead of np.NINF because np.NINF breaks for causal-masked
             # left-padded sampling.
             large_k = torch.tensor(1e4 if attention.dtype == torch.float16 else 1e30,
-                                   dtype=attention.dtype)
+                                   dtype=attention.dtype, device=q.device)
 
             attention = torch.where(attention_mask[:, None, :, :], attention,
                                     -large_k)

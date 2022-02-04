@@ -25,7 +25,6 @@ img_size = (224, 224)
 
 normalize = transforms.Normalize(MEAN_RGB, STDDEV_RGB)
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 prep_type = "fourier_pos_convnet"
 
@@ -43,6 +42,8 @@ elif prep_type == PrepType.FOURIER_POS_PIXEL:
 perceiver = ClassificationPerceiver(num_classes=1000,
                                     img_size=img_size,
                                     prep_type=prep_type)
+perceiver.eval()
+perceiver.to(device)
 
 # check if file exists
 if not os.path.isfile(ckpt_file):
@@ -51,7 +52,7 @@ if not os.path.isfile(ckpt_file):
 checkpoint = torch.load(ckpt_file, map_location=device)
 
 perceiver.load_state_dict(checkpoint['model_state_dict'])
-perceiver.eval()
+
 
 # img = load_image("./sample_data/dalmation.jpg", device)
 #
@@ -103,6 +104,7 @@ centered_img = resize_and_center_crop(img)  # img
 img_norm = normalize(centered_img)[None]
 img_norm = torch.from_numpy(img_norm)
 img_norm = img_norm.permute(0, 3, 1, 2).float()
+img_norm = img_norm.to(device)
 
 with torch.inference_mode():
     logits = perceiver(img_norm)

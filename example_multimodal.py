@@ -46,7 +46,7 @@ def load_video(path, max_frames=0, resize=(224, 224)):
     return np.array(frames) / 255.0
 
 
-sample_rate, audio = scipy.io.wavfile.read("output.wav")
+sample_rate, audio = scipy.io.wavfile.read("sample_data/output.wav")
 if audio.dtype == np.int16:
     audio = audio.astype(np.float32) / 2 ** 15
 elif audio.dtype != np.float32:
@@ -97,12 +97,12 @@ with torch.inference_mode():
 
 from utils.utils import dump_pickle
 
-output_torch = {k: reconstruction[k].numpy() for k in reconstruction.keys()}
+output_torch = {k: reconstruction[k].cpu().numpy() for k in reconstruction.keys()}
 dump_pickle(output_torch, "temp/output_multi_torch.pickle")
 
 
 # Visualize reconstruction of first 16 frames
-show_animation(reconstruction["image"][0])
+show_animation(reconstruction["image"][0].cpu())
 
 # Kinetics 700 Labels
 scores, indices = torch.top_k(F.softmax(reconstruction["label"]), 5)

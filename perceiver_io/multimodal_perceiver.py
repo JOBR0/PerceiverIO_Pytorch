@@ -194,7 +194,7 @@ class MultiModalPerceiver(nn.Module):
                 "label": None,
             }
             output = self.perceiver(
-                {"image": images, "audio": audio, "label": torch.zeros((batch_size, self.num_classes))},
+                {"image": images, "audio": audio, "label": torch.zeros((batch_size, self.num_classes), device=images.device)},
                 subsampled_output_points=subsampling)
 
             reconstruction["image"].append(output["image"])

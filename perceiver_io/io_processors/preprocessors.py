@@ -374,7 +374,7 @@ class AudioPreprocessor(nn.Module):
         index_dims = inputs.shape[1:-1]
 
         # Construct the position encoding.
-        pos_enc = self._positional_encoding(batch_size=batch_size, pos=pos)
+        pos_enc = self._positional_encoding(batch_size=batch_size, pos=pos).to(inputs.device)
 
         for i in range(0, self._n_extra_pos_mlp):
             # TODO check how this makes it deeper

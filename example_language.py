@@ -59,18 +59,18 @@ def pad(max_sequence_length: int, inputs, input_mask):
 
 inputs, input_mask = pad(MAX_SEQ_LEN, inputs, input_mask)
 
-inputs = torch.from_numpy(inputs)
-input_mask = torch.from_numpy(input_mask).bool()
+inputs = torch.from_numpy(inputs).to(device)
+input_mask = torch.from_numpy(input_mask).bool().to(device)
 
 # Predict
 with torch.inference_mode():
     out = perceiver(inputs, input_masks=input_mask)
 
-dump_pickle(out.numpy(), "temp/output_language_torch.pickle")
+dump_pickle(out.cpu().numpy(), "temp/output_language_torch.pickle")
 
 masked_tokens_predictions = out[0, 51:60].argmax(axis=-1)
 print("Greedy predictions:")
 print(masked_tokens_predictions)
 print()
 print("Predicted string:")
-print(tokenizer.to_string(masked_tokens_predictions.numpy()))
+print(tokenizer.to_string(masked_tokens_predictions.cpu().numpy()))

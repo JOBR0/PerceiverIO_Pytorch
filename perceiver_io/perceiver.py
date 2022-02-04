@@ -108,8 +108,7 @@ class PerceiverEncoder(nn.Module):
         attention_mask = None
         if input_mask is not None:
             attention_mask = make_cross_attention_mask(
-                query_mask=torch.ones(latents.shape[:2], dtype=torch.bool),
-                kv_mask=input_mask)
+                query_mask=torch.ones(latents.shape[:2], dtype=torch.bool, device=inputs.device), kv_mask=input_mask)
         latents = self.cross_attend(latents, inputs, attention_mask=attention_mask)
         for _ in range(self._num_blocks):
             for self_attend in self.self_attends:
@@ -252,7 +251,7 @@ class PerceiverDecoder(nn.Module):
         if query_mask is not None:
             attention_mask = make_cross_attention_mask(
                 query_mask=query_mask,
-                kv_mask=torch.ones(latents.shape[:2], dtype=torch.bool))
+                kv_mask=torch.ones(latents.shape[:2], dtype=torch.bool, device=query.device))
 
         output = self.decoding_cross_attn(query, latents, attention_mask=attention_mask)
         if self._final_project:
@@ -581,7 +580,9 @@ class MultimodalPreprocessor(nn.Module):
                 mask_token = self.mask_tokens[modality](output.shape[0])
                 mask_prob = self._mask_probs[modality]
 
-                mask = torch.bernoulli(torch.full([output.shape[0], output.shape[1]], fill_value=mask_prob))
+
+
+                mask = torch.bernoulli(torch.full([output.shape[0], output.shape[1]], fill_value=mask_prob)).to(mask_token.device)
                 mask = torch.unsqueeze(mask, dim=2)
                 output_masked = (1 - mask) * outputs[modality] + mask * mask_token
                 masked[modality] = output_masked

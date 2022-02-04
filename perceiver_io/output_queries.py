@@ -84,6 +84,8 @@ class BasicQuery(nn.Module):
                 pos_emb = torch.reshape(pos_emb, [N, -1, pos_emb.shape[-1]])
             else:
                 pos_emb = self._position_encoding(batch_size=N)
+
+            pos_emb = pos_emb.to(inputs.device)
         else:
             pos_emb = None
 

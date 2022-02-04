@@ -33,6 +33,9 @@ img2 = load_image("./sample_data/frame_0017.png", device)
 img1_norm = 2 * (img1 / 255.0) - 1.0
 img2_norm = 2 * (img2 / 255.0) - 1.0
 
+img1_norm = img1_norm.to(device)
+img2_norm = img2_norm.to(device)
+
 # Predict Flow
 with torch.inference_mode():
     flow = perceiver(img1_norm, img2_norm, test_mode=True)
