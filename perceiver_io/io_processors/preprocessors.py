@@ -273,7 +273,6 @@ class ImagePreprocessor(nn.Module):
 
         if len(position_encoding_projector) > 0:
             if self._position_encoding_type == PosEncodingType.TRAINABLE:
-                #TODO check why this has 2 parameters
                 self._positional_encoding.set_haiku_params(position_encoding_projector,
                                                            params.pop("trainable_position_encoding"))
             else:
