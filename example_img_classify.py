@@ -6,7 +6,7 @@ import torch
 import numpy as np
 
 from perceiver_io.classification_perceiver import ClassificationPerceiver, PrepType
-from utils.utils import load_image
+from utils.utils import load_image, dump_pickle
 
 from torchvision import transforms
 
@@ -121,6 +121,8 @@ with torch.inference_mode():
     print(top_preds)
     print(top_probs)
     print(top_labels)
+
+dump_pickle(logits.numpy(), f"temp/output_{str(prep_type)}_torch.pickle")
 
 print(logits)
 

@@ -1,5 +1,6 @@
 import functools
 import itertools
+import os.path
 import pickle
 
 import cv2
@@ -21,7 +22,15 @@ from utils.imagenet_labels import IMAGENET_LABELS
 #     and the raw pixels
 # conv_preprocessing: Uses a 2D fourier position encoding
 #     and a 2D conv-net as preprocessing
-model_type = 'conv_preprocessing' #@param ['learned_position_encoding', 'fourier_position_encoding', 'conv_preprocessing']
+from utils.utils import dump_pickle
+
+model_type = 'conv_preprocessing'  # @param ['learned_position_encoding', 'fourier_position_encoding', 'conv_preprocessing']
+model_type = 'learned_position_encoding'
+#model_type = 'fourier_position_encoding'
+
+files = {"learned_position_encoding": "imagenet_learned_position_encoding.pystate",
+         "fourier_position_encoding": "imagenet_fourier_position_encoding.pystate",
+         "conv_preprocessing": "imagenet_conv_preprocessing.pystate"}
 
 IMAGE_SIZE = (224, 224)
 
@@ -142,65 +151,63 @@ CONFIGS = {
     'conv_preprocessing': conv_maxpool_configs,
 }
 
+
 def imagenet_classifier(config, images):
-  input_preprocessor = io_processors.ImagePreprocessor(
-      **config['input_preprocessor'])
-  encoder = perceiver.PerceiverEncoder(**config['encoder'])
-  decoder = perceiver.ClassificationDecoder(
-      1000,
-      **config['decoder'])
-  model = perceiver.Perceiver(
-      encoder=encoder,
-      decoder=decoder,
-      input_preprocessor=input_preprocessor)
-  logits = model(images, is_training=False)
-  return logits
+    input_preprocessor = io_processors.ImagePreprocessor(
+        **config['input_preprocessor'])
+    encoder = perceiver.PerceiverEncoder(**config['encoder'])
+    decoder = perceiver.ClassificationDecoder(
+        1000,
+        **config['decoder'])
+    model = perceiver.Perceiver(
+        encoder=encoder,
+        decoder=decoder,
+        input_preprocessor=input_preprocessor)
+    logits = model(images, is_training=False)
+    return logits
 
 
 imagenet_classifier = hk.transform_with_state(imagenet_classifier)
 
 rng = jax.random.PRNGKey(42)
 
-
-
-
-
 rng = jax.random.PRNGKey(42)
-with open("haiku_models/imagenet_conv_preprocessing.pystate", 'rb') as f:
-  ckpt = pickle.loads(f.read())
+with open(os.path.join("haiku_checkpoints", files[model_type]), 'rb') as f:
+    ckpt = pickle.loads(f.read())
 
 params = ckpt['params']
 state = ckpt['state']
 
-
 with open('sample_data/dalmation.jpg', 'rb') as f:
-  img = imageio.imread(f)
-
+    img = imageio.imread(f)
 
 MEAN_RGB = (0.485 * 255, 0.456 * 255, 0.406 * 255)
 STDDEV_RGB = (0.229 * 255, 0.224 * 255, 0.225 * 255)
 
+
 def normalize(im):
-  return (im - np.array(MEAN_RGB)) / np.array(STDDEV_RGB)
+    return (im - np.array(MEAN_RGB)) / np.array(STDDEV_RGB)
+
 
 def resize_and_center_crop(image):
-  """Crops to center of image with padding then scales."""
-  shape = image.shape
+    """Crops to center of image with padding then scales."""
+    shape = image.shape
 
-  image_height = shape[0]
-  image_width = shape[1]
+    image_height = shape[0]
+    image_width = shape[1]
 
-  padded_center_crop_size = ((224 / (224 + 32)) *
-       np.minimum(image_height, image_width).astype(np.float32)).astype(np.int32)
+    padded_center_crop_size = ((224 / (224 + 32)) *
+                               np.minimum(image_height, image_width).astype(np.float32)).astype(np.int32)
 
-  offset_height = ((image_height - padded_center_crop_size) + 1) // 2
-  offset_width = ((image_width - padded_center_crop_size) + 1) // 2
-  crop_window = [offset_height, offset_width,
-                 padded_center_crop_size, padded_center_crop_size]
+    offset_height = ((image_height - padded_center_crop_size) + 1) // 2
+    offset_width = ((image_width - padded_center_crop_size) + 1) // 2
+    crop_window = [offset_height, offset_width,
+                   padded_center_crop_size, padded_center_crop_size]
 
-  # image = tf.image.crop_to_bounding_box(image_bytes, *crop_window)
-  image = image[crop_window[0]:crop_window[0] + crop_window[2], crop_window[1]:crop_window[1]+crop_window[3]]
-  return cv2.resize(image, (224, 224), interpolation=cv2.INTER_CUBIC)
+    # image = tf.image.crop_to_bounding_box(image_bytes, *crop_window)
+    image = image[crop_window[0]:crop_window[0] + crop_window[2], crop_window[1]:crop_window[1] + crop_window[3]]
+    return cv2.resize(image, (224, 224), interpolation=cv2.INTER_CUBIC)
+
 
 # Imagenet classification
 
@@ -210,8 +217,8 @@ def resize_and_center_crop(image):
 centered_img = resize_and_center_crop(img)  # img
 logits, _ = imagenet_classifier.apply(params, state, rng, CONFIGS[model_type], normalize(centered_img)[None])
 
-
 print(logits)
+dump_pickle(np.array(logits), f"temp/output_{model_type}_haiku.pickle")
 
 _, indices = jax.lax.top_k(logits[0], 5)
 probs = jax.nn.softmax(logits[0])
@@ -220,4 +227,4 @@ plt.imshow(img)
 plt.axis('off')
 print('Top 5 labels:')
 for i in list(indices):
-  print(f'{IMAGENET_LABELS[i]}: {probs[i]}')
+    print(f'{IMAGENET_LABELS[i]}: {probs[i]}')

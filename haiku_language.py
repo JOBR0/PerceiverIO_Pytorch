@@ -7,8 +7,9 @@ import numpy as np
 import pickle
 
 from perceiver import perceiver, position_encoding, io_processors, bytes_tokenizer
+from utils.utils import dump_pickle
 
-with open("haiku_models/language_perceiver_io_bytes.pickle", "rb") as f:
+with open("haiku_checkpoints/language_perceiver_io_bytes.pickle", "rb") as f:
   params = pickle.loads(f.read())
 
 
@@ -115,6 +116,9 @@ inputs, input_mask = pad(MAX_SEQ_LEN, inputs, input_mask)
 rng = jax.random.PRNGKey(1)  # Unused
 
 out = apply_perceiver(params, rng=rng, inputs=inputs, input_mask=input_mask)
+
+
+dump_pickle(np.array(out), "temp/output_language_haiku.pickle")
 
 masked_tokens_predictions = out[0, 51:60].argmax(axis=-1)
 print("Greedy predictions:")

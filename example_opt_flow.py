@@ -4,7 +4,7 @@ import torch
 import matplotlib.pyplot as plt
 
 from utils.flow_utils import flow_to_image
-from utils.utils import load_image
+from utils.utils import load_image, dump_pickle
 from perceiver_io.flow_perceiver import FlowPerceiver
 
 
@@ -39,6 +39,8 @@ img2_norm = img2_norm.to(device)
 # Predict Flow
 with torch.inference_mode():
     flow = perceiver(img1_norm, img2_norm, test_mode=True)
+
+dump_pickle(flow.cpu().numpy(), "temp/output_flow_torch.pickle") # TODO: remove
 
 # Show prediction
 figure = plt.figure()
