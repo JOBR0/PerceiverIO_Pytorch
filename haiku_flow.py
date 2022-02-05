@@ -93,9 +93,11 @@ optical_flow = hk.transform(optical_flow)
 
 # If you encounter GPU memory errors while running the function below,
 # you can run it on the CPU instead:
-_apply_optical_flow_model = jax.jit(optical_flow.apply, backend="cpu")
+#_apply_optical_flow_model = jax.jit(optical_flow.apply, backend="cpu")
 
 #_apply_optical_flow_model = jax.jit(optical_flow.apply)
+
+_apply_optical_flow_model = optical_flow.apply
 
 def compute_grid_indices(image_shape, patch_size=TRAIN_SIZE, min_overlap=20):
   if min_overlap >= TRAIN_SIZE[0] or min_overlap >= TRAIN_SIZE[1]:
