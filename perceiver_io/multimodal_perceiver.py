@@ -5,8 +5,6 @@ from typing import Sequence
 import torch.nn as nn
 import torch
 
-import numpy as np
-
 from perceiver_io.io_processors.postprocessors import AudioPostprocessor, ProjectionPostprocessor, \
     ClassificationPostprocessor
 from perceiver_io.io_processors.preprocessors import AudioPreprocessor, ImagePreprocessor, OneHotPreprocessor
@@ -135,7 +133,7 @@ class MultiModalPerceiver(nn.Module):
 
             multimodal_decoder_params = {key[key.find("/") + 1:]: params.pop(key) for key in list(params.keys()) if
                                          key.startswith("multimodal_decoder")}
-            multimodal_decoder_params = {key[key.find('/') + 1:]: multimodal_decoder_params[key] for key in
+            multimodal_decoder_params = {key[key.find("/") + 1:]: multimodal_decoder_params[key] for key in
                                          multimodal_decoder_params.keys()}
 
             basic_decoder_params = {key[key.find("/") + 1:]: multimodal_decoder_params.pop(key) for key in
@@ -199,7 +197,7 @@ class MultiModalPerceiver(nn.Module):
             reconstruction["audio"].append(output["audio"])
             reconstruction["label"] = output["label"] # TODO make mean out of it
 
-        reconstruction["image"] = torch.cat(reconstruction["image"], dim=1).reshape(images.shape)
+        reconstruction["image"] = torch.cat(reconstruction["image"], dim=1).reshape([batch_size, t, h, w, c]).moveaxis(-1, -3)
         reconstruction["audio"] = torch.cat(reconstruction["audio"], dim=1).reshape(audio.shape)
 
         return reconstruction
