@@ -184,17 +184,23 @@ class ClassificationPostprocessor(nn.Module):
     def __init__(
             self,
             num_input_channels: int,
-            num_classes: int):
+            num_classes: int,
+            project: bool = True,):
         super().__init__()
         self._num_classes = num_classes
-        self.linear = nn.Linear(num_input_channels, num_classes)
-        lecun_normal_(self.linear.weight)
-        nn.init.constant_(self.linear.bias, 0)
+        self._project = project
+        if project:
+            self.linear = nn.Linear(num_input_channels, num_classes)
+            lecun_normal_(self.linear.weight)
+            nn.init.constant_(self.linear.bias, 0)
 
     def forward(self, inputs: torch.Tensor, *,
                 pos: Optional[torch.Tensor] = None,
                 modality_sizes: Optional[ModalitySizeT] = None) -> torch.Tensor:
-        logits = self.linear(inputs)
+        if self._project:
+            logits = self.linear(inputs)
+        else:
+            logits = inputs
         return logits[:, 0, :]
 
     def set_haiku_params(self, params):
