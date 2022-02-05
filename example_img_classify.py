@@ -111,13 +111,14 @@ with torch.inference_mode():
     top_labels = np.array(IMAGENET_LABELS)[top_preds.cpu().numpy()]
     top_probs = probs[top_preds]
 
-
 print("Top 5 labels:")
 for i in range(top_probs.shape[1]):
-    print(f'{top_labels[0,i]}: {top_probs[0,i]}')
+    # print as percentage
+    print(f"{top_labels[0, i]}: {top_probs[0, i] * 100:.1f}%")
 
 dump_pickle(logits.numpy(), f"temp/output_{str(prep_type)}_torch.pickle")
 
 # Show prediciton
 plt.imshow(img)
+plt.title(f"Label: {top_labels[0]}")
 plt.show()
