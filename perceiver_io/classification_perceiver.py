@@ -89,7 +89,7 @@ class ClassificationPerceiver(nn.Module):
             num_self_attend_heads=8,
             use_query_residual=True,)
 
-        decoder_query_residual = False if prep_type == "learned_pos_encoding" else True
+        decoder_query_residual = False if prep_type == PrepType.LEARNED_POS_1X1CONV else True
 
         perceiver_decoder_kwargs = dict(
             use_query_residual=decoder_query_residual,
