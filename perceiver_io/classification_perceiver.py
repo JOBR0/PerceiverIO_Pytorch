@@ -6,6 +6,7 @@ from typing import Sequence
 import torch.nn as nn
 import torch
 
+from perceiver_io.io_processors.postprocessors import ClassificationPostprocessor
 from perceiver_io.io_processors.preprocessors import ImagePreprocessor
 from perceiver_io.output_queries import TrainableQuery
 from perceiver_io.perceiver import PerceiverEncoder, Perceiver
@@ -100,6 +101,12 @@ class ClassificationPerceiver(nn.Module):
             init_scale=0.02,
         )
 
+        output_postprocessor = ClassificationPostprocessor(
+            num_classes=num_classes,
+            num_input_channels=num_classes,
+            project=False
+        )
+
         self.perceiver = Perceiver(
             num_blocks=8,
             num_self_attends_per_block=6,
@@ -110,7 +117,7 @@ class ClassificationPerceiver(nn.Module):
             output_queries=output_query,
             perceiver_decoder_kwargs=perceiver_decoder_kwargs,
             final_project_out_channels=num_classes,
-            output_postprocessors=None)
+            output_postprocessors=output_postprocessor)
 
     def load_haiku_params(self, file):
         with open(file, "rb") as f:
