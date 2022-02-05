@@ -245,8 +245,7 @@ class FlowPostprocessor(nn.Module):
             self, inputs: torch.Tensor, *,
             pos: Optional[torch.Tensor] = None,
             modality_sizes: Optional[Mapping[str, int]] = None) -> torch.Tensor:
-        # TODO check wher channel dimension should be first or last
         batch_size = inputs.shape[0]
         inputs = inputs * self.flow_scale_factor
 
-        return inputs.reshape([batch_size, *self.img_size, 2])
+        return inputs.reshape([batch_size, *self.img_size, 2]).permute(0, 3, 1, 2)

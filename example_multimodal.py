@@ -87,7 +87,8 @@ checkpoint = torch.load(ckpt_file, map_location=device)
 
 perceiver.load_state_dict(checkpoint['model_state_dict'])
 
-video_input = torch.from_numpy(video[None, :16]).float().to(device)
+
+video_input = torch.from_numpy(video[None, :16]).movedim(-1, -3).float().to(device)
 audio_input = torch.from_numpy(audio[None, :16 * AUDIO_SAMPLES_PER_FRAME, 0:1]).float().to(device)
 
 # Auto-encode the first 16 frames of the video and one of the audio channels
@@ -101,7 +102,7 @@ dump_pickle(output_torch, "temp/output_multi_torch.pickle") #TODO remove
 
 
 # Visualize reconstruction of first 16 frames
-show_animation(np.clip(reconstruction["image"][0].cpu().numpy(), 0, 1))
+show_animation(np.clip(reconstruction["image"][0].movedim(-3, -1).cpu().numpy(), 0, 1))
 
 # Kinetics 700 Labels
 scores, indices = torch.topk(F.softmax(reconstruction["label"], dim=-1), 5)
@@ -124,7 +125,7 @@ with torch.inference_mode():
     reconstruction = {"image": [], "audio": [], "label": None}
     for i in range(nframes // 16):
         print(f"Processing chunk {i}/{nframes // 16}")
-        video_input = torch.from_numpy(video_chunks[None, i]).float().to(device)
+        video_input = torch.from_numpy(video_chunks[None, i]).movedim(-1, -3).float().to(device)
         audio_input = torch.from_numpy(audio_chunks[None, i, :, 0:1]).float().to(device)
         output = perceiver(video_input, audio_input)
         #output = perceiver(video_chunks[None, i], audio_chunks[None, i, :, 0:1])
@@ -140,4 +141,4 @@ with torch.inference_mode():
 
 
 # Visualize reconstruction of entire video
-show_animation(np.clip(reconstruction["image"][0].cpu().numpy(), 0, 1))
+show_animation(np.clip(reconstruction["image"][0].movedim(-3, -1).cpu().numpy(), 0, 1))

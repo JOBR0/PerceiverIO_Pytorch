@@ -145,9 +145,8 @@ class FlowPerceiver(nn.Module):
         """Predict flow for one image patch as big as training images"""
         with autocast(enabled=self.mixed_precision):
             # Extract overlapping 3x3 patches
-            patch = patches_for_flow(patch)
+            patch = patches_for_flow(patch).movedim(-1, -3)
             output = self.perceiver(patch)
-            output = output.permute(0, 3, 1, 2)
         return output
 
     def forward(self, image1: torch.Tensor, image2: torch.Tensor, test_mode: bool = False, min_overlap: int = 20):

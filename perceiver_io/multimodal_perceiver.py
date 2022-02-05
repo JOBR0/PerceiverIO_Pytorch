@@ -95,7 +95,7 @@ class MultiModalPerceiver(nn.Module):
 
         audio_out_query = FourierQuery(
             concat_preprocessed_input=False,
-            output_index_dims = (n_audio_samples // self.audio_samples_per_patch,),
+            output_index_dims=(n_audio_samples // self.audio_samples_per_patch,),
             num_bands=192,
             max_resolution=(n_audio_samples,),
             sine_only=False,
@@ -104,15 +104,13 @@ class MultiModalPerceiver(nn.Module):
         label_out_query = TrainableQuery(
             output_index_dims=(1,),
             concat_preprocessed_input=False,
-            num_channels=1024,#TODO check
+            num_channels=1024,
             init_scale=0.02)
 
         output_queries = {
             "audio": audio_out_query,
             "image": image_out_query,
             "label": label_out_query, }
-
-
 
         self.perceiver = Perceiver(
             num_self_attends_per_block=8,
@@ -137,24 +135,25 @@ class MultiModalPerceiver(nn.Module):
 
             multimodal_decoder_params = {key[key.find("/") + 1:]: params.pop(key) for key in list(params.keys()) if
                                          key.startswith("multimodal_decoder")}
-            multimodal_decoder_params = {key[key.find('/') + 1:]: multimodal_decoder_params[key] for key in multimodal_decoder_params.keys()}
+            multimodal_decoder_params = {key[key.find('/') + 1:]: multimodal_decoder_params[key] for key in
+                                         multimodal_decoder_params.keys()}
 
-            basic_decoder_params = {key[key.find("/") + 1:]: multimodal_decoder_params.pop(key) for key in list(multimodal_decoder_params.keys()) if
-                                         key.startswith("basic_decoder")}
+            basic_decoder_params = {key[key.find("/") + 1:]: multimodal_decoder_params.pop(key) for key in
+                                    list(multimodal_decoder_params.keys()) if
+                                    key.startswith("basic_decoder")}
             self.perceiver._decoder.set_haiku_params(basic_decoder_params)
             self.perceiver.set_haiku_params(multimodal_decoder_params)
-
 
             preprocessor_params = {key[key.find("/") + 1:]: params.pop(key) for key in list(params.keys()) if
                                    key.startswith("multimodal_preprocessor")}
 
             self.perceiver._multi_preprocessor.set_haiku_params(preprocessor_params)
 
-            classification_decoder_params = {key[key.find("/") + 1 + len("~/basic_decoder/"):]: params.pop(key) for key in list(params.keys()) if
+            classification_decoder_params = {key[key.find("/") + 1 + len("~/basic_decoder/"):]: params.pop(key) for key
+                                             in list(params.keys()) if
                                              key.startswith("classification_decoder")}
 
             self.perceiver._output_queries["label"].set_haiku_params(classification_decoder_params)
-
 
             projection_postprocessor_params = {key[key.find("/") + 1:]: params.pop(key) for key in list(params.keys())
                                                if
@@ -176,10 +175,9 @@ class MultiModalPerceiver(nn.Module):
 
     def forward(self, images: torch.Tensor, audio: torch.Tensor, n_chunks: int = 128):
         """"""
-        # TODO check image channel position
-        batch_size = images.shape[0]
+        batch_size, t, c, h, w = images.shape
 
-        image_chunk_size = np.prod(images.shape[1:-1]).item() // n_chunks
+        image_chunk_size = t*h*w // n_chunks
         audio_chunk_size = audio.shape[1] // self.audio_samples_per_patch // n_chunks
 
         reconstruction = {"image": [], "audio": [], "label": None}
@@ -193,12 +191,13 @@ class MultiModalPerceiver(nn.Module):
                 "label": None,
             }
             output = self.perceiver(
-                {"image": images, "audio": audio, "label": torch.zeros((batch_size, self.num_classes), device=images.device)},
+                {"image": images, "audio": audio,
+                 "label": torch.zeros((batch_size, self.num_classes), device=images.device)},
                 subsampled_output_points=subsampling)
 
             reconstruction["image"].append(output["image"])
             reconstruction["audio"].append(output["audio"])
-            reconstruction["label"] = output["label"]
+            reconstruction["label"] = output["label"] # TODO make mean out of it
 
         reconstruction["image"] = torch.cat(reconstruction["image"], dim=1).reshape(images.shape)
         reconstruction["audio"] = torch.cat(reconstruction["audio"], dim=1).reshape(audio.shape)

@@ -203,6 +203,7 @@ class ImagePreprocessor(nn.Module):
             self, inputs: torch.Tensor, *,
             pos=None,
             network_input_is_1d: bool = True) -> PreprocessorOutputT:
+        """inputs should have pytorch image shape [.., channel, height, width]"""
         if self._prep_type in ["conv", "conv1x1"]:
 
             has_temp_dim = len(inputs.shape) == 5
@@ -211,20 +212,23 @@ class ImagePreprocessor(nn.Module):
                 b, t, _, _, _ = inputs.shape
                 inputs = inputs.view(b * t, *inputs.shape[2:])
 
-            inputs = inputs.permute(0, 3, 1, 2)
             if self._prep_type == "conv":
                 # Convnet image featurization.
                 # Downsamples spatially by a factor of 4
                 inputs = self.convnet(inputs)
             elif self._prep_type == "conv1x1":
                 inputs = self.convnet_1x1(inputs)
-            inputs = inputs.permute(0, 2, 3, 1)
+
+            # Move channel dimension to the end
+            inputs = inputs.movedim(-3, -1)
 
             if has_temp_dim:
                 inputs = inputs.view(b, t, *inputs.shape[1:])
 
 
         elif self._prep_type == 'patches':
+            # Move channel dimension to the end
+            inputs = inputs.movedim(-3, -1)
             # Space2depth featurization.
             # Video: B x T x H x W x C
             inputs = space_to_depth(
@@ -239,6 +243,8 @@ class ImagePreprocessor(nn.Module):
             if self._conv_after_patching:
                 inputs = self._conv_after_patch_layer(inputs)
         elif self._prep_type == 'pixels':
+            # Move channel dimension to the end
+            inputs = inputs.movedim(-3, -1)
             # if requested, downsamples in the crudest way
             if inputs.ndim == 4:
                 inputs = inputs[:,

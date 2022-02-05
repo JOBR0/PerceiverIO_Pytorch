@@ -1,6 +1,6 @@
 import abc
 import warnings
-from typing import Mapping, Dict, Optional
+from typing import Mapping, Dict, Optional, Union
 
 import numpy as np
 import torch
@@ -295,7 +295,7 @@ class Perceiver(nn.Module):
             output_queries=None,
             output_query_padding_channels: int = 0,
             input_padding_channels: int = 0,
-            input_channels: dict = None, # TODO make int or dict
+            input_channels: Union[dict, int] = None,
             input_mask_probs: dict = None,
     ):
         super().__init__()

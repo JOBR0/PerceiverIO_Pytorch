@@ -148,4 +148,4 @@ class ClassificationPerceiver(nn.Module):
         """
         :param img: (batch_size, 3, H, W)
         """
-        return self.perceiver(img.permute(0, 2, 3, 1))
+        return self.perceiver(img)
