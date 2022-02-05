@@ -1,13 +1,10 @@
-import base64
 import os
 
 import cv2
-import imageio
 import numpy as np
 import scipy.io.wavfile
 
 import torch
-# import functional torch
 import torch.nn.functional as F
 
 from perceiver_io.multimodal_perceiver import MultiModalPerceiver
@@ -56,7 +53,7 @@ video_path = "./sample_data/video.avi"
 video = load_video(video_path)
 
 # Visualize inputs
-#show_animation(video) #TODO uncomment
+# show_animation(video) #TODO uncomment
 
 NUM_FRAMES = 16
 AUDIO_SAMPLES_PER_FRAME = 48000 // 25
@@ -87,7 +84,6 @@ checkpoint = torch.load(ckpt_file, map_location=device)
 
 perceiver.load_state_dict(checkpoint['model_state_dict'])
 
-
 video_input = torch.from_numpy(video[None, :16]).movedim(-1, -3).float().to(device)
 audio_input = torch.from_numpy(audio[None, :16 * AUDIO_SAMPLES_PER_FRAME, 0:1]).float().to(device)
 
@@ -98,8 +94,7 @@ with torch.inference_mode():
 from utils.utils import dump_pickle
 
 output_torch = {k: reconstruction[k].cpu().numpy() for k in reconstruction.keys()}
-dump_pickle(output_torch, "temp/output_multi_torch.pickle") #TODO remove
-
+dump_pickle(output_torch, "temp/output_multi_torch.pickle")  # TODO remove
 
 # Visualize reconstruction of first 16 frames
 show_animation(np.clip(reconstruction["image"][0].movedim(-3, -1).cpu().numpy(), 0, 1))
@@ -128,7 +123,7 @@ with torch.inference_mode():
         video_input = torch.from_numpy(video_chunks[None, i]).movedim(-1, -3).float().to(device)
         audio_input = torch.from_numpy(audio_chunks[None, i, :, 0:1]).float().to(device)
         output = perceiver(video_input, audio_input)
-        #output = perceiver(video_chunks[None, i], audio_chunks[None, i, :, 0:1])
+        # output = perceiver(video_chunks[None, i], audio_chunks[None, i, :, 0:1])
 
         reconstruction["image"].append(output["image"])
         reconstruction["audio"].append(output["audio"])
@@ -137,8 +132,6 @@ with torch.inference_mode():
 
     reconstruction["image"] = torch.cat(reconstruction["image"], dim=1)
     reconstruction["audio"] = torch.cat(reconstruction["audio"], dim=1)
-
-
 
 # Visualize reconstruction of entire video
 show_animation(np.clip(reconstruction["image"][0].movedim(-3, -1).cpu().numpy(), 0, 1))
