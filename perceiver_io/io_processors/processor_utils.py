@@ -213,97 +213,97 @@ class Conv2DDownsample(nn.Module):
             warnings.warn(f"Some state variables couldn't be matched to model: {state.keys()}")
 
 
-class Conv2DUpsample(nn.Module):
-    """Upsamples 4x using 2 2D transposed convolutions."""
-
-    def __init__(
-            self,
-            n_outputs: int,
-            in_channels: int = 64,
-    ):
-        """Constructs a Conv2DUpsample model.
-    Args:
-      n_outputs: The number of output channels of the module.
-      name: Name of the module.
-    """
-        super().__init__()
-
-        self.transp_conv1 = nn.ConvTranspose2d(in_channels=in_channels,
-                                               out_channels=n_outputs * 2,
-                                               kernel_size=4,
-                                               stride=2,
-                                               padding=0,
-                                               output_padding=0,
-                                               bias=True)
-
-        self.transp_conv1 = hk.Conv2DTranspose(
-            output_channels=n_outputs * 2,
-            kernel_shape=4,
-            stride=2,
-            with_bias=True,
-            padding='SAME',
-            name='transp_conv_1')
-
-        self.transp_conv2 = nn.ConvTranspose2d(in_channels=n_outputs,
-                                               out_channels=n_outputs,
-                                               kernel_size=4,
-                                               stride=2,
-                                               padding=0,
-                                               output_padding=0,
-                                               bias=True)
-
-        self.transp_conv2 = hk.Conv2DTranspose(
-            output_channels=n_outputs,
-            kernel_shape=4,
-            stride=2,
-            with_bias=True,
-            padding='SAME',
-            name='transp_conv_2')
-
-    def forward(self, inputs: torch.Tensor, *,
-                test_local_stats: bool = False) -> torch.Tensor:  # TODO what is test_local_stats?
-        out = inputs
-        out = self.transp_conv1(out)
-        out = F.relu(out)
-        out = self.transp_conv2(out)
-
-        return out
-
-
-class Conv3DUpsample(nn.Module):
-    """Simple convolutional auto-encoder."""
-
-    def __init__(self,
-                 n_outputs: int,
-                 n_time_upsamples: int = 2,
-                 n_space_upsamples: int = 4):
-
-        super().__init__()
-
-        self._n_outputs = n_outputs
-        self._n_time_upsamples = n_time_upsamples
-        self._n_space_upsamples = n_space_upsamples
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        n_upsamples = max(self._n_time_upsamples, self._n_space_upsamples)
-
-        time_stride = 2
-        space_stride = 2
-
-        for i in range(n_upsamples):
-            if i >= self._n_time_upsamples:
-                time_stride = 1
-            if i >= self._n_space_upsamples:
-                space_stride = 1
-
-            channels = self._n_outputs * pow(2, n_upsamples - 1 - i)
-
-            x = hk.Conv3DTranspose(output_channels=channels,
-                                   stride=[time_stride, space_stride, space_stride],
-                                   kernel_shape=[4, 4, 4],
-                                   name=f'conv3d_transpose_{i}')(x)
-            if i != n_upsamples - 1:
-                x = F.relu(x)
-
-        return x
+# class Conv2DUpsample(nn.Module):
+#     """Upsamples 4x using 2 2D transposed convolutions."""
+#
+#     def __init__(
+#             self,
+#             n_outputs: int,
+#             in_channels: int = 64,
+#     ):
+#         """Constructs a Conv2DUpsample model.
+#     Args:
+#       n_outputs: The number of output channels of the module.
+#       name: Name of the module.
+#     """
+#         super().__init__()
+#
+#         self.transp_conv1 = nn.ConvTranspose2d(in_channels=in_channels,
+#                                                out_channels=n_outputs * 2,
+#                                                kernel_size=4,
+#                                                stride=2,
+#                                                padding=0,
+#                                                output_padding=0,
+#                                                bias=True)
+#
+#         self.transp_conv1 = hk.Conv2DTranspose(
+#             output_channels=n_outputs * 2,
+#             kernel_shape=4,
+#             stride=2,
+#             with_bias=True,
+#             padding='SAME',
+#             name='transp_conv_1')
+#
+#         self.transp_conv2 = nn.ConvTranspose2d(in_channels=n_outputs,
+#                                                out_channels=n_outputs,
+#                                                kernel_size=4,
+#                                                stride=2,
+#                                                padding=0,
+#                                                output_padding=0,
+#                                                bias=True)
+#
+#         self.transp_conv2 = hk.Conv2DTranspose(
+#             output_channels=n_outputs,
+#             kernel_shape=4,
+#             stride=2,
+#             with_bias=True,
+#             padding='SAME',
+#             name='transp_conv_2')
+#
+#     def forward(self, inputs: torch.Tensor, *,
+#                 test_local_stats: bool = False) -> torch.Tensor:  # TODO what is test_local_stats?
+#         out = inputs
+#         out = self.transp_conv1(out)
+#         out = F.relu(out)
+#         out = self.transp_conv2(out)
+#
+#         return out
+#
+#
+# class Conv3DUpsample(nn.Module):
+#     """Simple convolutional auto-encoder."""
+#
+#     def __init__(self,
+#                  n_outputs: int,
+#                  n_time_upsamples: int = 2,
+#                  n_space_upsamples: int = 4):
+#
+#         super().__init__()
+#
+#         self._n_outputs = n_outputs
+#         self._n_time_upsamples = n_time_upsamples
+#         self._n_space_upsamples = n_space_upsamples
+#
+#     def forward(self, x: torch.Tensor) -> torch.Tensor:
+#         n_upsamples = max(self._n_time_upsamples, self._n_space_upsamples)
+#
+#         time_stride = 2
+#         space_stride = 2
+#
+#         for i in range(n_upsamples):
+#             if i >= self._n_time_upsamples:
+#                 time_stride = 1
+#             if i >= self._n_space_upsamples:
+#                 space_stride = 1
+#
+#             channels = self._n_outputs * pow(2, n_upsamples - 1 - i)
+#
+#             x = hk.Conv3DTranspose(output_channels=channels,
+#                                    stride=[time_stride, space_stride, space_stride],
+#                                    kernel_shape=[4, 4, 4],
+#                                    name=f'conv3d_transpose_{i}')(x)
+#             if i != n_upsamples - 1:
+#                 x = F.relu(x)
+#
+#         return x
 
