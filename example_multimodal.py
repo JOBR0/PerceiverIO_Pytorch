@@ -22,6 +22,7 @@ def crop_center_square(frame):
     start_y = (y // 2) - (min_dim // 2)
     return frame[start_y:start_y + min_dim, start_x:start_x + min_dim]
 
+
 def load_video(path, max_frames=0, resize=(224, 224)):
     cap = cv2.VideoCapture(path)
     frames = []
@@ -41,13 +42,13 @@ def load_video(path, max_frames=0, resize=(224, 224)):
         cap.release()
     return np.array(frames) / 255.0
 
+
 def save_video(path, data: np.ndarray):
-    fourcc = cv2.VideoWriter_fourcc("M","J","P","G")
+    fourcc = cv2.VideoWriter_fourcc("M", "J", "P", "G")
     out = cv2.VideoWriter(path, fourcc, 25, (224, 224))
     for frame in data:
-        out.write((frame*255).astype(np.uint8))
+        out.write((frame * 255).astype(np.uint8))
     out.release()
-
 
 
 sample_rate, audio = scipy.io.wavfile.read("sample_data/audio.wav")
@@ -59,11 +60,10 @@ elif audio.dtype != np.float32:
 video_path = "./sample_data/video.avi"
 video = load_video(video_path)
 
-
 # Visualize inputs
 # show_animation(video) #TODO uncomment
 FRAMES_PER_SECOND = 25
-SAMPLING_RATE = 48000 # Hz
+SAMPLING_RATE = 48000  # Hz
 NUM_FRAMES = 16
 AUDIO_SAMPLES_PER_FRAME = SAMPLING_RATE // FRAMES_PER_SECOND
 SAMPLES_PER_PATCH = 16
@@ -107,8 +107,10 @@ output_torch["image"] = np.moveaxis(output_torch["image"], -3, -1)
 dump_pickle(output_torch, "temp/output_multi_torch.pickle")  # TODO remove
 
 # Save outputs
-scipy.io.wavfile.write("sample_data/audio_reconstr_p1.wav", SAMPLING_RATE, reconstruction["audio"][0].cpu().numpy().astype(np.int16))
-save_video("./sample_data/video_reconstr_p1.avi", np.clip(reconstruction["image"][0].movedim(-3, -1).cpu().numpy(), 0, 1))
+scipy.io.wavfile.write("sample_data/audio_reconstr_p1.wav", SAMPLING_RATE,
+                       (reconstruction["audio"][0].cpu().numpy() * 2 ** 15).astype(np.int16))
+save_video("./sample_data/video_reconstr_p1.avi",
+           np.clip(reconstruction["image"][0].movedim(-3, -1).cpu().numpy(), 0, 1))
 
 # Kinetics 700 Labels
 scores, indices = torch.topk(F.softmax(reconstruction["label"], dim=-1), 5)
@@ -118,7 +120,6 @@ for score, index in zip(scores[0], indices[0]):
 
 # Visualize reconstruction of first 16 frames
 show_animation(np.clip(reconstruction["image"][0].movedim(-3, -1).cpu().numpy(), 0, 1))
-
 
 # Auto-encode the entire video, one chunk at a time
 
@@ -143,7 +144,7 @@ with torch.inference_mode():
         reconstruction["image"].append(output["image"])
         reconstruction["audio"].append(output["audio"])
         # TODO check what other implementations does here
-        reconstruction["label"].append(output["label"][:,None])
+        reconstruction["label"].append(output["label"][:, None])
 
     reconstruction["image"] = torch.cat(reconstruction["image"], dim=1)
     reconstruction["audio"] = torch.cat(reconstruction["audio"], dim=1)
@@ -154,8 +155,10 @@ output_torch["image"] = np.moveaxis(output_torch["image"], -3, -1)
 dump_pickle(output_torch, "temp/output_multi_torch_full.pickle")  # TODO remove
 
 # Save outputs
-scipy.io.wavfile.write("sample_data/audio_reconstr_full.wav", SAMPLING_RATE, reconstruction["audio"][0].cpu().numpy().astype(np.int16))
-save_video("./sample_data/video_reconstr_full.avi", np.clip(reconstruction["image"][0].movedim(-3, -1).cpu().numpy(), 0, 1))
+scipy.io.wavfile.write("sample_data/audio_reconstr_full.wav", SAMPLING_RATE,
+                       (reconstruction["audio"][0].cpu().numpy() * 2 ** 15).astype(np.int16))
+save_video("./sample_data/video_reconstr_full.avi",
+           np.clip(reconstruction["image"][0].movedim(-3, -1).cpu().numpy(), 0, 1))
 
 # Kinetics 700 Labels
 scores, indices = torch.topk(F.softmax(reconstruction["label"], dim=-1), 5)
