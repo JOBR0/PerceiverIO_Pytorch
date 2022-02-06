@@ -22,7 +22,7 @@ from perceiver import perceiver, io_processors
 
 # Utilities to fetch videos from UCF101 dataset
 from utils.kinetics_700_classes import KINETICS_CLASSES
-from utils.utils import show_animation
+from utils.utils import show_animation, dump_pickle
 
 UCF_ROOT = 'https://www.crcv.ucf.edu/THUMOS14/UCF101/UCF101/'
 _VIDEO_LIST = None
@@ -311,6 +311,10 @@ state = {}
 # Auto-encode the first 16 frames of the video and one of the audio channels
 reconstruction = autoencode_video(params, state, rng, video[None, :16], audio[None, :16*AUDIO_SAMPLES_PER_FRAME, 0:1])
 
+
+output_torch = {k: reconstruction[k] for k in reconstruction.keys()}
+dump_pickle(output_torch, "temp/output_multi_haiku.pickle")
+
 # Visualize reconstruction of first 16 frames
 show_animation(reconstruction["image"][0])
 
@@ -350,6 +354,9 @@ reconstruction = jax.tree_multimap(lambda *args: np.stack(args, axis=1),
                                    *chunks)
 
 reconstruction = jax.tree_map(lambda x: np.reshape(x, [-1] + list(x.shape[2:])), reconstruction)
+
+output_torch = {k: reconstruction[k] for k in reconstruction.keys()}
+dump_pickle(output_torch, "temp/output_multi_haiku_full.pickle")
 
 # Visualize reconstruction of entire video
 table([to_gif(reconstruction['image'][0]), play_audio(np.array(reconstruction['audio'][0]))])
