@@ -140,39 +140,25 @@ class PerceiverDecoder(nn.Module):
     """Cross-attention-based decoder.
     Args:
         final_project_out_channels (int): Number of channels to which output is projected if final_project is True.
-        position_encoding_type (str) Default: 'trainable'.
-        # Ignored if position_encoding_type == 'none':
-        output_index_dims (int):  Default: None.
-        subsampled_index_dims (int): None,
         num_latent_channels (int):  Number of channels in latent variables. Default: 1024,
         qk_channels (int):  Default: None,
         v_channels (int): Default: None,
         use_query_residual (bool):  Default: False,
         output_w_init: str = "lecun_normal",
-        concat_preprocessed_input: bool = False,
         num_heads (int): Number of heads for attention. Default: 1,
         final_project (bool): Whether to apply final linear layer. Default: True,
-        query_channels (int): Number of channels of the query features that are used for the cross-attention.
-            If set to None, the channels are set according to teh position encoding. Default: None.
-        **position_encoding_kwargs
     """
 
     def __init__(self,
                  query_channels: int,
                  final_project_out_channels: int,
-                 # position_encoding_type: str = 'trainable',
-                 # output_index_dims: int = None,
-                 # subsampled_index_dims: int = None,
                  num_latent_channels: int = 1024,
                  qk_channels: int = None,
                  v_channels: int = None,
                  use_query_residual: bool = False,
                  output_w_init: str = "lecun_normal",
-                 concat_preprocessed_input: bool = False,
                  num_heads: int = 1,
-                 final_project: bool = True,
-
-                 **position_encoding_kwargs):
+                 final_project: bool = True,):
         super().__init__()
 
         self._output_num_channels = final_project_out_channels
@@ -206,41 +192,10 @@ class PerceiverDecoder(nn.Module):
                 raise ValueError(f"{self._output_w_init} not supported as output_w_init")
             nn.init.constant_(self.final_layer.bias, 0)
 
-    def output_shape(self, inputs):
-        return ((inputs[0], self._subsampled_index_dims, self._output_num_channels),
-                None)
+    # def output_shape(self, inputs):
+    #     return ((inputs[0], self._subsampled_index_dims, self._output_num_channels),
+    #             None)
 
-    def n_query_channels(self):
-        return self.query_channels
-
-    def decoder_query(self, inputs, modality_sizes=None, inputs_without_pos=None, subsampled_points=None):
-        assert self._position_encoding_type != 'none'  # Queries come from elsewhere
-
-        N = inputs.shape[0]
-
-        if subsampled_points is not None:
-            # unravel_index returns a tuple (x_idx, y_idx, ...)
-            # stack to get the [n, d] tensor of coordinates
-            # pos = torch.stack(torch.unravel_index(subsampled_points, self._output_index_dim), dim=1)
-
-            pos = unravel_index(subsampled_points, self._output_index_dim)
-            # Map these coordinates to [-1, 1]
-            pos = -1 + 2 * pos / torch.tensor(self._output_index_dim)[None, :]
-            pos = torch.broadcast_to(pos[None],
-                                     [N, pos.shape[0], pos.shape[1]])
-            pos_emb = self.output_pos_enc(
-                batch_size=N,
-                pos=pos)
-            pos_emb = torch.reshape(pos_emb, [N, -1, pos_emb.shape[-1]])
-        else:
-            pos_emb = self.output_pos_enc(batch_size=N)
-        if self._concat_preprocessed_input:
-            if inputs_without_pos is None:
-                raise ValueError('Value is required for inputs_without_pos if'
-                                 ' concat_preprocessed_input is True')
-            pos_emb = torch.cat([inputs_without_pos, pos_emb], dim=-1)
-
-        return pos_emb
 
     def forward(self, query, latents, *, query_mask=None):
         # Cross-attention decoding.
@@ -274,10 +229,22 @@ class PerceiverDecoder(nn.Module):
 class Perceiver(nn.Module):
     """The Perceiver: a scalable, fully attentional architecture.
     Args:
-        encoder (PerceiverEncoder): The encoder to use.
-        decoder (AbstractPerceiverDecoder): The decoder to use.
-        input_preprocessors: The input preprocessor to use. Default: None.
-        output_postprocessors: The output preprocessor to use. Default: None.
+        num_blocks (int): Number of times the block is applied with shared weights. Default: 8
+        num_self_attends_per_block (int): Number of self-attentions in the block. Default: 6,
+        num_latents: (int): Number of latent vectors. Default 512,
+        num_latent_channels (int): Number of channels for the latent vectors. Default: 1024,
+        final_project (bool): Whether to apply a linear layer to the outputs before the post-processors. Default: True,
+        final_project_out_channels (int): Number of output channels for the final projection layer. Default: None,
+        perceiver_encoder_kwargs (Dict): Additional arguments for the perceiver encoder {},
+        perceiver_decoder_kwargs (Dict): Additional arguments for the perceiver decoder {},
+        input_preprocessors (dict / nn.Module): Optional input preprocessors. 1 or none for each modality. Default: None,
+        output_postprocessors (dict / nn.Module): Optional output postprocessors. 1 or none for each modality. Default: None,
+        output_queries (dict / nn.Module): Modules that create the output queries. 1 for each modality. Default: None,
+        output_query_padding_channels (int): Number of learnable features channels that are added to the output queries. Default: 0,
+        input_padding_channels (int): Number of learnable features channels that are added to the preprocessed inputs. Default: 0,
+        input_channels (dict, int): = The number of input channels need to be specified if NO preprocessor is used. Otherwise,
+                                    the number will be inferred from the preprocessor. Default: None,
+        input_mask_probs (dict): Probability with which each input modality will be masked out. Default None,
     """
 
     def __init__(
@@ -290,9 +257,9 @@ class Perceiver(nn.Module):
             final_project_out_channels: int = None,
             perceiver_encoder_kwargs: Dict = {},
             perceiver_decoder_kwargs: Dict = {},
-            input_preprocessors=None,
-            output_postprocessors=None,
-            output_queries=None,
+            input_preprocessors: Union[dict, nn.Module] = None,
+            output_postprocessors: Union[dict, nn.Module] = None,
+            output_queries: Union[dict, nn.Module] = None,
             output_query_padding_channels: int = 0,
             input_padding_channels: int = 0,
             input_channels: Union[dict, int] = None,
