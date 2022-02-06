@@ -4,59 +4,109 @@ from utils.utils import load_pickle, dump_pickle
 print("Multmodal")
 output_multi_haiku = load_pickle("temp/output_multi_haiku.pickle")
 output_multi_torch = load_pickle("temp/output_multi_torch.pickle")
-output_diff = {k: (output_multi_torch[k] - output_multi_haiku[k]) ** 2 for k in output_multi_haiku.keys()}
+output_diff = {k: np.abs(output_multi_torch[k] - output_multi_haiku[k]) for k in output_multi_haiku.keys()}
 max_diffs = {k: np.max(output_diff[k]) for k in output_diff.keys()}
 std_diffs = {k: np.std(output_diff[k]) for k in output_diff.keys()}
 print("max", max_diffs)
 print("std", std_diffs)
+rel_diff = {k: output_diff[k] / np.abs(output_multi_haiku[k]) for k in output_multi_haiku.keys()}
+max_rel_diffs = {k: np.max(rel_diff[k]) for k in rel_diff.keys()}
+std_rel_diffs = {k: np.std(rel_diff[k]) for k in rel_diff.keys()}
+print("max rel", max_rel_diffs)
+print("std rel", std_rel_diffs)
+
+
+
+output_multi_haiku = load_pickle("temp/output_multi_haiku_full.pickle")
+output_multi_haiku = {k: np.reshape(output_multi_haiku[k], (1, -1,)+output_multi_haiku[k].shape[2:]) for k in output_multi_haiku.keys() if k != "label"}
+#output_multi_haiku = {k: output_multi_haiku[k][0] for k in output_multi_haiku.keys()}
+output_multi_torch = load_pickle("temp/output_multi_torch_full.pickle")
+output_diff = {k: np.abs(output_multi_torch[k] - output_multi_haiku[k]) for k in output_multi_haiku.keys()}
+max_diffs = {k: np.max(output_diff[k]) for k in output_diff.keys()}
+std_diffs = {k: np.std(output_diff[k]) for k in output_diff.keys()}
+print("max", max_diffs)
+print("std", std_diffs)
+rel_diff = {k: output_diff[k] / np.abs(output_multi_haiku[k]) for k in output_multi_haiku.keys()}
+max_rel_diffs = {k: np.max(rel_diff[k]) for k in rel_diff.keys()}
+std_rel_diffs = {k: np.std(rel_diff[k]) for k in rel_diff.keys()}
+print("max rel", max_rel_diffs)
+print("std rel", std_rel_diffs)
 
 print("Language")
 
 output_language_haiku = load_pickle("temp/output_language_haiku.pickle")
 output_language_torch = load_pickle("temp/output_language_torch.pickle")
-output_diff = output_language_haiku - output_language_torch
+output_diff = np.abs(output_language_haiku - output_language_torch)
 max_diffs = np.max(output_diff)
 std_diffs = np.std(output_diff)
 print("max", max_diffs)
 print("std", std_diffs)
+rel_diff = output_diff / np.abs(output_language_haiku)
+max_rel_diffs = np.max(rel_diff)
+std_rel_diffs = np.std(rel_diff)
+print("max rel", max_rel_diffs)
+print("std rel", std_rel_diffs)
 
 print("Classification")
 
 print("FOURIER_POS_CONVNET")
 output_class_haiku_1 = load_pickle("temp/output_conv_preprocessing_haiku.pickle")
 output_class_torch_1 = load_pickle("temp/output_PrepType.FOURIER_POS_CONVNET_torch.pickle")
-output_diff = output_class_haiku_1 - output_class_torch_1
+output_diff = np.abs(output_class_haiku_1 - output_class_torch_1)
 max_diffs = np.max(output_diff)
 std_diffs = np.std(output_diff)
 print("max", max_diffs)
 print("std", std_diffs)
+rel_diff = output_diff / np.abs(output_class_haiku_1)
+max_rel_diffs = np.max(rel_diff)
+std_rel_diffs = np.std(rel_diff)
+print("max rel", max_rel_diffs)
+print("std rel", std_rel_diffs)
 
 print("LEARNED_POS_1X1CONV")
 output_class_haiku_2 = load_pickle("temp/output_learned_position_encoding_haiku.pickle")
 output_class_torch_2 = load_pickle("temp/output_PrepType.LEARNED_POS_1X1CONV_torch.pickle")
-output_diff = output_class_haiku_2 - output_class_torch_2
+output_diff = np.abs(output_class_haiku_2 - output_class_torch_2)
 max_diffs = np.max(output_diff)
 std_diffs = np.std(output_diff)
 print("max", max_diffs)
 print("std", std_diffs)
+rel_diff = output_diff / np.abs(output_class_haiku_2)
+max_rel_diffs = np.max(rel_diff)
+std_rel_diffs = np.std(rel_diff)
+print("max rel", max_rel_diffs)
+print("std rel", std_rel_diffs)
 
 print("FOURIER_POS_PIXEL")
 output_class_haiku_3 = load_pickle("temp/output_fourier_position_encoding_haiku.pickle")
 output_class_torch_3 = load_pickle("temp/output_PrepType.FOURIER_POS_PIXEL_torch.pickle")
-output_diff = output_class_haiku_3 - output_class_torch_3
+output_diff = np.abs(output_class_haiku_3 - output_class_torch_3)
 max_diffs = np.max(output_diff)
 std_diffs = np.std(output_diff)
 print("max", max_diffs)
 print("std", std_diffs)
+rel_diff = output_diff / np.abs(output_class_haiku_3)
+max_rel_diffs = np.max(rel_diff)
+std_rel_diffs = np.std(rel_diff)
+print("max rel", max_rel_diffs)
+print("std rel", std_rel_diffs)
+
+
 
 print("Flow")
 
 output_flow_haiku = load_pickle("temp/output_flow_haiku.pickle")
 output_flow_torch = load_pickle("temp/output_flow_torch.pickle")
 output_flow_torch = np.moveaxis(output_flow_torch,1,-1)
-output_diff = output_flow_haiku - output_flow_torch
+output_diff = np.abs(output_flow_haiku - output_flow_torch)
 max_diffs = np.max(output_diff)
 std_diffs = np.std(output_diff)
 print("max", max_diffs)
 print("std", std_diffs)
+rel_diff = output_diff / np.abs(output_flow_haiku)
+max_rel_diffs = np.max(rel_diff)
+std_rel_diffs = np.std(rel_diff)
+print("max rel", max_rel_diffs)
+print("std rel", std_rel_diffs)
+
 
