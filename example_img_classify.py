@@ -78,7 +78,7 @@ def img_classify_example():
 
     dump_pickle(logits.numpy(), f"temp/output_{str(prep_type)}_torch.pickle") # TODO remove
 
-    # Show prediciton
+    # Show prediction
     plt.imshow((img[0].permute(1, 2, 0).numpy() / 255))
     plt.title(f"Label: {top_labels[0]}")
     plt.show()
