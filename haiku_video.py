@@ -16,7 +16,7 @@ import jax.numpy as jnp
 import numpy as np
 import scipy.io.wavfile
 
-from IPython.display import HTML
+#from IPython.display import HTML
 
 from perceiver import perceiver, io_processors
 
@@ -109,7 +109,7 @@ video_names = list_ucf_videos()
 video_path = fetch_ucf_video(video_names[0])
 
 
-sample_rate, audio = scipy.io.wavfile.read("output.wav")
+sample_rate, audio = scipy.io.wavfile.read("sample_data/audio.wav")
 if audio.dtype == np.int16:
   audio = audio.astype(np.float32) / 2**15
 elif audio.dtype != np.float32:

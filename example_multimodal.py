@@ -107,7 +107,7 @@ output_torch["image"] = np.moveaxis(output_torch["image"], -3, -1)
 dump_pickle(output_torch, "temp/output_multi_torch.pickle")  # TODO remove
 
 # Save outputs
-scipy.io.wavfile.write("sample_data/audio_reconstr_p1.wav", SAMPLING_RATE, reconstruction["audio"][0].numpy().astype(np.int16))
+scipy.io.wavfile.write("sample_data/audio_reconstr_p1.wav", SAMPLING_RATE, reconstruction["audio"][0].cpu().numpy().astype(np.int16))
 save_video("./sample_data/video_reconstr_p1.avi", np.clip(reconstruction["image"][0].movedim(-3, -1).cpu().numpy(), 0, 1))
 
 # Kinetics 700 Labels
@@ -143,18 +143,18 @@ with torch.inference_mode():
         reconstruction["image"].append(output["image"])
         reconstruction["audio"].append(output["audio"])
         # TODO check what other implementations does here
-        reconstruction["label"].append(output["label"])
+        reconstruction["label"].append(output["label"][:,None])
 
     reconstruction["image"] = torch.cat(reconstruction["image"], dim=1)
     reconstruction["audio"] = torch.cat(reconstruction["audio"], dim=1)
-    reconstruction["label"] = torch.mean(reconstruction["label"], dim=1)
+    reconstruction["label"] = torch.cat(reconstruction["label"], dim=1).mean(dim=1)
 
 output_torch = {k: reconstruction[k].cpu().numpy() for k in reconstruction.keys()}
 output_torch["image"] = np.moveaxis(output_torch["image"], -3, -1)
 dump_pickle(output_torch, "temp/output_multi_torch_full.pickle")  # TODO remove
 
 # Save outputs
-scipy.io.wavfile.write("sample_data/audio_reconstr_full.wav", SAMPLING_RATE, reconstruction["audio"][0].numpy().astype(np.int16))
+scipy.io.wavfile.write("sample_data/audio_reconstr_full.wav", SAMPLING_RATE, reconstruction["audio"][0].cpu().numpy().astype(np.int16))
 save_video("./sample_data/video_reconstr_full.avi", np.clip(reconstruction["image"][0].movedim(-3, -1).cpu().numpy(), 0, 1))
 
 # Kinetics 700 Labels
