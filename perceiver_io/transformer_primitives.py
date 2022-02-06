@@ -90,7 +90,7 @@ class Attention(nn.Module):
         variance_scaling_(self.final.weight, scale=final_init_scale, mode="fan_in", distribution="truncated_normal")
         nn.init.constant_(self.final.bias, 0)
 
-    def forward(self, inputs_q, inputs_k, inputs_v, attention_mask=None, attention_bias = None, return_matrix=False):
+    def forward(self, inputs_q, inputs_k, inputs_v, attention_mask=None, attention_bias=None, return_matrix=False):
 
         # Project QKV to a common feature dimension.
         q = self.proj_q(inputs_q)
@@ -104,7 +104,8 @@ class Attention(nn.Module):
         k = torch.reshape(k, [batch, kv_time, self._num_heads, self._qk_channels_per_head])
         v = torch.reshape(v, [batch, kv_time, self._num_heads, self._v_channels_per_head])
 
-        result = self.attend(q, k, v, attention_mask=attention_mask, attention_bias=attention_bias, return_matrix = return_matrix)
+        result = self.attend(q, k, v, attention_mask=attention_mask, attention_bias=attention_bias,
+                             return_matrix=return_matrix)
 
         if return_matrix:
             attention_matrix, result = result
@@ -116,7 +117,8 @@ class Attention(nn.Module):
 
         return result
 
-    def attend(self, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, attention_mask: bool = None, attention_bias = None, return_matrix: bool=False):
+    def attend(self, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, attention_mask: bool = None,
+               attention_bias=None, return_matrix: bool = False):
         """Computes multi-head attention using a query, key and value.
       Args:
         q: Query with shape [batch, q_indices, num_heads, head_dim].
@@ -131,7 +133,7 @@ class Attention(nn.Module):
         _, _, _, v_head_dim = v.shape
         hiddens = num_heads * v_head_dim
 
-        #attention = torch.einsum("bthd,bThd->bhtT", q, k)
+        # attention = torch.einsum("bthd,bThd->bhtT", q, k)
         q = q.permute(0, 2, 1, 3)
         k = k.permute(0, 2, 1, 3)
         v = v.permute(0, 2, 1, 3)
@@ -140,7 +142,6 @@ class Attention(nn.Module):
 
         # scale = (q_head_dim ** -0.25)
         # attention = (scale * q) @ (scale * k.transpose(-2, -1))
-
 
         if attention_bias is not None:
             attention += attention_bias
@@ -159,12 +160,11 @@ class Attention(nn.Module):
 
         normalized = F.softmax(attention, dim=-1)
 
-        self.dropout(normalized)
+        normalized = self.dropout(normalized)
 
-        #summed = torch.einsum("bhtT,bThd->bthd", normalized, v)
+        # summed = torch.einsum("bhtT,bThd->bthd", normalized, v)
         summed = normalized @ v
         summed = summed.permute(0, 2, 1, 3)
-
 
         summed = torch.reshape(summed, [batch, q_indices, hiddens])
 
@@ -296,7 +296,7 @@ class SelfAttention(nn.Module):
                 *,
                 attention_mask=None,
                 attention_bias=None,
-                return_matrix: bool=False):
+                return_matrix: bool = False):
         x = inputs
         qkv_inputs = self.layer_norm1(inputs)
         attention = self.attention(qkv_inputs, qkv_inputs, qkv_inputs,
@@ -408,7 +408,7 @@ class CrossAttention(nn.Module):
                 *,
                 attention_mask=None,
                 attention_bias=None,
-                return_matrix: bool=False):
+                return_matrix: bool = False):
 
         inputs_kv_norm = self.layer_norm_kv(inputs_kv)
         inputs_q_norm = self.layer_norm_q(inputs_q)
@@ -418,7 +418,7 @@ class CrossAttention(nn.Module):
                                    inputs_v=inputs_kv_norm,
                                    attention_mask=attention_mask,
                                    attention_bias=attention_bias,
-                                   return_matrix = return_matrix)
+                                   return_matrix=return_matrix)
 
         if return_matrix:
             attention_matrix, attention = attention
