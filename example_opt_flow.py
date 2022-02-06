@@ -51,7 +51,3 @@ plt.imshow(img2[0].permute(1, 2, 0).cpu().numpy()/255)
 plt.subplot(2, 2, 3)
 plt.imshow(flow_to_image(flow[0].permute(1, 2, 0).cpu().numpy()))
 plt.show()
-
-
-
-
