@@ -12,71 +12,77 @@ from utils.imagenet_labels import IMAGENET_LABELS
 
 import torch.nn.functional as F
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-print("Device:", device)
 
-MEAN_RGB = (0.485 * 255, 0.456 * 255, 0.406 * 255)
-STDDEV_RGB = (0.229 * 255, 0.224 * 255, 0.225 * 255)
+def img_classify_example():
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    print("Device:", device)
 
-img_size = (224, 224)
+    MEAN_RGB = (0.485 * 255, 0.456 * 255, 0.406 * 255)
+    STDDEV_RGB = (0.229 * 255, 0.224 * 255, 0.225 * 255)
 
-normalize = transforms.Normalize(MEAN_RGB, STDDEV_RGB)
+    img_size = (224, 224)
 
-# There are three different pretrained models that use different input preprocessing:
-prep_type = PrepType.FOURIER_POS_CONVNET
-if prep_type == PrepType.FOURIER_POS_CONVNET:
-    # Uses a 2D fourier position encoding and a 2D conv-net as preprocessing
-    ckpt_file = "./pytorch_checkpoints/imagenet_conv_preprocessing.pth"
-elif prep_type == PrepType.LEARNED_POS_1X1CONV:
-    #  Uses a learned position encoding over the image and 1x1 convolution over the pixels
-    ckpt_file = "./pytorch_checkpoints/imagenet_learned_position_encoding.pth"
-elif prep_type == PrepType.FOURIER_POS_PIXEL:
-    # Uses a 2D fourier position encoding and the raw pixels
-    ckpt_file = "./pytorch_checkpoints/imagenet_fourier_position_encoding.pth"
+    normalize = transforms.Normalize(MEAN_RGB, STDDEV_RGB)
 
-perceiver = ClassificationPerceiver(num_classes=1000,
-                                    img_size=img_size,
-                                    prep_type=prep_type)
-perceiver.eval()
-perceiver.to(device)
+    # There are three different pretrained models that use different input preprocessing:
+    prep_type = PrepType.FOURIER_POS_CONVNET
+    if prep_type == PrepType.FOURIER_POS_CONVNET:
+        # Uses a 2D fourier position encoding and a 2D conv-net as preprocessing
+        ckpt_file = "./pytorch_checkpoints/imagenet_conv_preprocessing.pth"
+    elif prep_type == PrepType.LEARNED_POS_1X1CONV:
+        #  Uses a learned position encoding over the image and 1x1 convolution over the pixels
+        ckpt_file = "./pytorch_checkpoints/imagenet_learned_position_encoding.pth"
+    elif prep_type == PrepType.FOURIER_POS_PIXEL:
+        # Uses a 2D fourier position encoding and the raw pixels
+        ckpt_file = "./pytorch_checkpoints/imagenet_fourier_position_encoding.pth"
 
-# check if file exists
-if not os.path.isfile(ckpt_file):
-    raise ValueError("Please download the model checkpoint and place it in /pytorch_checkpoints")
+    perceiver = ClassificationPerceiver(num_classes=1000,
+                                        img_size=img_size,
+                                        prep_type=prep_type)
+    perceiver.eval()
+    perceiver.to(device)
 
-checkpoint = torch.load(ckpt_file, map_location=device)
+    # check if file exists
+    if not os.path.isfile(ckpt_file):
+        raise ValueError("Please download the model checkpoint and place it in /pytorch_checkpoints")
 
-perceiver.load_state_dict(checkpoint["model_state_dict"])
+    checkpoint = torch.load(ckpt_file, map_location=device)
 
-img = load_image("./sample_data/dalmation.jpg", device)
+    perceiver.load_state_dict(checkpoint["model_state_dict"])
 
-h, w = img.shape[2:]
-# crop to square and then resize to 224x224
-min_size = min(h, w)
-img_norm = transforms.functional.resized_crop(img, top=int(h / 2 - min_size / 2), left=int(w / 2 - min_size / 2),
-                                              height=min_size, width=min_size, size=img_size)
-img_norm = normalize(img_norm)
-img_norm = img_norm.to(device)
+    img = load_image("./sample_data/dalmation.jpg", device)
 
-with torch.inference_mode():
-    logits = perceiver(img_norm)
-    # get top 5 predictions
-    top_preds = torch.topk(logits, 5)[1]
+    h, w = img.shape[2:]
+    # crop to square and then resize to 224x224
+    min_size = min(h, w)
+    img_norm = transforms.functional.resized_crop(img, top=int(h / 2 - min_size / 2), left=int(w / 2 - min_size / 2),
+                                                  height=min_size, width=min_size, size=img_size)
+    img_norm = normalize(img_norm)
+    img_norm = img_norm.to(device)
 
-    probs = F.softmax(logits, dim=-1).squeeze()
+    with torch.inference_mode():
+        logits = perceiver(img_norm)
+        # get top 5 predictions
+        top_preds = torch.topk(logits, 5)[1]
 
-    # get top 5 class labels
-    top_labels = np.array(IMAGENET_LABELS)[top_preds.cpu().numpy()]
-    top_probs = probs[top_preds]
+        probs = F.softmax(logits, dim=-1).squeeze()
 
-print("Top 5 labels:")
-for i in range(top_probs.shape[1]):
-    # print as percentage
-    print(f"{top_labels[0, i]}: {top_probs[0, i] * 100:.1f}%")
+        # get top 5 class labels
+        top_labels = np.array(IMAGENET_LABELS)[top_preds.cpu().numpy()]
+        top_probs = probs[top_preds]
 
-dump_pickle(logits.numpy(), f"temp/output_{str(prep_type)}_torch.pickle")
+    print("Top 5 labels:")
+    for i in range(top_probs.shape[1]):
+        # print as percentage
+        print(f"{top_labels[0, i]}: {top_probs[0, i] * 100:.1f}%")
 
-# Show prediciton
-plt.imshow((img[0].permute(1, 2, 0).numpy()/255))
-plt.title(f"Label: {top_labels[0]}")
-plt.show()
+    dump_pickle(logits.numpy(), f"temp/output_{str(prep_type)}_torch.pickle") # TODO remove
+
+    # Show prediciton
+    plt.imshow((img[0].permute(1, 2, 0).numpy() / 255))
+    plt.title(f"Label: {top_labels[0]}")
+    plt.show()
+
+
+if __name__ == "__main__":
+    img_classify_example()

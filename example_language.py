@@ -8,14 +8,14 @@ from utils.bytes_tokenizer import BytesTokenizer
 from utils.utils import dump_pickle
 
 
-def pad(max_sequence_length: int, inputs, input_mask):
+def pad(max_sequence_length: int, inputs, input_mask, pad_token):
     input_len = inputs.shape[1]
     assert input_len <= max_sequence_length
     pad_len = max_sequence_length - input_len
     padded_inputs = np.pad(
         inputs,
         pad_width=((0, 0), (0, pad_len)),
-        constant_values=tokenizer.pad_token)
+        constant_values=pad_token)
     padded_mask = np.pad(
         input_mask,
         pad_width=((0, 0), (0, pad_len)),
@@ -23,50 +23,55 @@ def pad(max_sequence_length: int, inputs, input_mask):
     return padded_inputs, padded_mask
 
 
-MAX_SEQ_LEN = 2048
+def language_example():
+    MAX_SEQ_LEN = 2048
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-tokenizer = BytesTokenizer()
+    tokenizer = BytesTokenizer()
 
-perceiver = LanguagePerceiver(vocab_size=tokenizer.vocab_size)
-perceiver.to(device)
-perceiver.eval()
+    perceiver = LanguagePerceiver(vocab_size=tokenizer.vocab_size)
+    perceiver.to(device)
+    perceiver.eval()
 
-ckpt_file = "./pytorch_checkpoints/language_perceiver_io_bytes.pth"
-# check if file exists
-if not os.path.isfile(ckpt_file):
-    raise ValueError("Please download the model checkpoint and place it in /pytorch_checkpoints")
-checkpoint = torch.load(ckpt_file, map_location=device)
-perceiver.load_state_dict(checkpoint["model_state_dict"])
+    ckpt_file = "./pytorch_checkpoints/language_perceiver_io_bytes.pth"
+    # check if file exists
+    if not os.path.isfile(ckpt_file):
+        raise ValueError("Please download the model checkpoint and place it in /pytorch_checkpoints")
+    checkpoint = torch.load(ckpt_file, map_location=device)
+    perceiver.load_state_dict(checkpoint["model_state_dict"])
 
-input_str = "This is an incomplete sentence where some words are missing."
+    input_str = "This is an incomplete sentence where some words are missing."
 
-input_tokens = tokenizer.to_int(input_str)
+    input_tokens = tokenizer.to_int(input_str)
 
-# Mask " missing.". Note that the model performs much better if the masked chunk
-# starts with a space.
-input_tokens[51:60] = tokenizer.mask_token
-print("Tokenized string without masked bytes:")
-print(tokenizer.to_string(input_tokens))
+    # Mask " missing.". Note that the model performs much better if the masked chunk
+    # starts with a space.
+    input_tokens[51:60] = tokenizer.mask_token
+    print("Tokenized string without masked bytes:")
+    print(tokenizer.to_string(input_tokens))
 
-# Pad and reshape inputs
-inputs = input_tokens[None]
-input_mask = np.ones_like(inputs)
+    # Pad and reshape inputs
+    inputs = input_tokens[None]
+    input_mask = np.ones_like(inputs)
 
-inputs, input_mask = pad(MAX_SEQ_LEN, inputs, input_mask)
+    inputs, input_mask = pad(MAX_SEQ_LEN, inputs, input_mask, tokenizer.pad_token)
 
-inputs = torch.from_numpy(inputs).to(device)
-input_mask = torch.from_numpy(input_mask).bool().to(device)
+    inputs = torch.from_numpy(inputs).to(device)
+    input_mask = torch.from_numpy(input_mask).bool().to(device)
 
-# Predict
-with torch.inference_mode():
-    out = perceiver(inputs, input_masks=input_mask)
+    # Predict
+    with torch.inference_mode():
+        out = perceiver(inputs, input_masks=input_mask)
 
-dump_pickle(out.cpu().numpy(), "temp/output_language_torch.pickle")  # TODO: remove
+    dump_pickle(out.cpu().numpy(), "temp/output_language_torch.pickle")  # TODO: remove
 
-masked_tokens_predictions = out[0, 51:60].argmax(axis=-1)
-print("Greedy predictions:")
-print(masked_tokens_predictions)
-print("Predicted string:")
-print(tokenizer.to_string(masked_tokens_predictions.cpu().numpy()))
+    masked_tokens_predictions = out[0, 51:60].argmax(axis=-1)
+    print("Greedy predictions:")
+    print(masked_tokens_predictions)
+    print("Predicted string:")
+    print(tokenizer.to_string(masked_tokens_predictions.cpu().numpy()))
+
+
+if __name__ == "__main__":
+    language_example()
