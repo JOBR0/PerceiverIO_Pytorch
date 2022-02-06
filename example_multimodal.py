@@ -61,7 +61,7 @@ video_path = "./sample_data/video.avi"
 video = load_video(video_path)
 
 # Visualize inputs
-# show_animation(video) #TODO uncomment
+show_animation(video)
 FRAMES_PER_SECOND = 25
 SAMPLING_RATE = 48000  # Hz
 NUM_FRAMES = 16

@@ -178,7 +178,7 @@ class MultiModalPerceiver(nn.Module):
         image_chunk_size = t*h*w // n_chunks
         audio_chunk_size = audio.shape[1] // self.audio_samples_per_patch // n_chunks
 
-        reconstruction = {"image": [], "audio": [], "label": None}
+        reconstruction = {"image": [], "audio": [], "label": []}
 
         for chunk_idx in range(n_chunks):
             subsampling = {
@@ -195,9 +195,10 @@ class MultiModalPerceiver(nn.Module):
 
             reconstruction["image"].append(output["image"])
             reconstruction["audio"].append(output["audio"])
-            reconstruction["label"] = output["label"] # TODO make mean out of it
+            reconstruction["label"].append(output["label"][:,None])
 
         reconstruction["image"] = torch.cat(reconstruction["image"], dim=1).reshape([batch_size, t, h, w, c]).moveaxis(-1, -3)
         reconstruction["audio"] = torch.cat(reconstruction["audio"], dim=1).reshape(audio.shape)
+        reconstruction["label"] = torch.cat(reconstruction["label"], dim=1).mean(dim=1)
 
         return reconstruction
