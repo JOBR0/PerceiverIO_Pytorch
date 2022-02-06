@@ -335,7 +335,7 @@ class Perceiver(nn.Module):
         self._output_queries = output_queries
 
         query_channels = (
-                    max(m.n_query_channels() for m in self._output_queries.values()) + output_query_padding_channels)
+                max(m.n_query_channels() for m in self._output_queries.values()) + output_query_padding_channels)
         self.query_channels = query_channels
 
         self.padding_embeddings = nn.ModuleDict()
@@ -396,7 +396,6 @@ class Perceiver(nn.Module):
                 if subsampled_output_points[modality] is not None:
                     output_modality_sizes[modality] = subsampled_output_points[modality].shape[0]
 
-
         outputs = self._decoder(decoder_query, latents, query_mask=query_mask)
 
         if self._output_postprocessors:
@@ -454,7 +453,6 @@ class Perceiver(nn.Module):
             warnings.warn(f"Some parameters couldn't be matched to model: {params.keys()}")
 
 
-
 def restructure(modality_sizes: ModalitySizeT,
                 inputs: torch.Tensor) -> Mapping[str, torch.Tensor]:
     """Partitions a [B, N, C] tensor into tensors for each modality.
@@ -473,6 +471,7 @@ def restructure(modality_sizes: ModalitySizeT,
         index += size
         outputs[modality] = inp
     return outputs
+
 
 class MultimodalPreprocessor(nn.Module):
     """Multimodal preprocessing for Perceiver Encoder.
@@ -510,9 +509,6 @@ class MultimodalPreprocessor(nn.Module):
         else:
             assert input_channels is not None, "if no preprocessors, input_channels must be specified"
             self._common_channels = (max(input_channels.values()) + self._min_padding_size)
-
-
-        #self.input_channels = input_channels
 
         if self._mask_probs is not None:
             self.mask_tokens = nn.ModuleDict()
@@ -552,7 +548,6 @@ class MultimodalPreprocessor(nn.Module):
                     inputs[modality], pos=pos,
                     network_input_is_1d=network_input_is_1d)
 
-
         if self.padding_embeddings is not None:
             modality_sizes = {}
 
@@ -571,8 +566,6 @@ class MultimodalPreprocessor(nn.Module):
         else:
             modality_sizes = {modality: outputs[modality].shape[1] for modality in outputs.keys()}
 
-
-
         if self._mask_probs is not None:
             masked = {}
             for modality, output in outputs.items():
@@ -580,15 +573,12 @@ class MultimodalPreprocessor(nn.Module):
                 mask_token = self.mask_tokens[modality](output.shape[0])
                 mask_prob = self._mask_probs[modality]
 
-
-
-                mask = torch.bernoulli(torch.full([output.shape[0], output.shape[1]], fill_value=mask_prob)).to(mask_token.device)
+                mask = torch.bernoulli(torch.full([output.shape[0], output.shape[1]], fill_value=mask_prob)).to(
+                    mask_token.device)
                 mask = torch.unsqueeze(mask, dim=2)
                 output_masked = (1 - mask) * outputs[modality] + mask * mask_token
                 masked[modality] = output_masked
             outputs = masked
-
-
 
         # Apply a predictable ordering to the modalities
         outputs = [outputs[k] for k in sorted(outputs.keys())]
@@ -604,119 +594,3 @@ class MultimodalPreprocessor(nn.Module):
 
         if len(params) != 0:
             warnings.warn(f"Some parameters couldn't be matched to model: {params.keys()}")
-
-# class BasicVideoAutoencodingDecoder(AbstractPerceiverDecoder):
-#     """Cross-attention based video-autoencoding decoder.
-#
-#   Light-weight wrapper of `BasicDecoder` with video reshaping logic.
-#   """
-#
-#     def __init__(self,
-#                  output_shape,
-#                  position_encoding_type,
-#                  **decoder_kwargs):
-#         super().__init__()
-#         if len(output_shape) != 4:  # B, T, H, W
-#             raise ValueError(f'Expected rank 4 output_shape, got {output_shape}.')
-#         # Build the decoder components:
-#         self._output_shape = output_shape
-#         self._output_num_channels = decoder_kwargs['output_num_channels']
-#
-#         self.decoder = BasicDecoder(
-#             output_index_dims=self._output_shape[1:4],  # T*H*W
-#             position_encoding_type=position_encoding_type,
-#             **decoder_kwargs)
-#
-#     def decoder_query(self, inputs, modality_sizes=None,
-#                       inputs_without_pos=None, subsampled_points=None):
-#         return self.decoder.decoder_query(inputs,
-#                                           modality_sizes=modality_sizes,
-#                                           inputs_without_pos=inputs_without_pos,
-#                                           subsampled_points=subsampled_points)
-#
-#     def n_query_channels(self):
-#         return self.decoder.n_query_channels()
-#
-#     def output_shape(self, inputs):
-#         return ([inputs.shape[0]] + self._output_shape[1:] +
-#                 [self._output_num_channels], None)
-#
-#     def forward(self, query, latents, *, query_mask=None):
-#         output = self.decoder(query, latents)
-#
-#         output = torch.reshape(output, self._output_shape + [output.shape[-1]])
-#         return output
-
-#
-# class MultimodalDecoder(AbstractPerceiverDecoder):
-#     """Multimodal decoding by composing uni-modal decoders.
-#
-#   The modalities argument of the constructor is a dictionary mapping modality
-#   name to the decoder of that modality. That decoder will be used to construct
-#   queries for that modality. However, there is a shared cross attention across
-#   all modalities, using the concatenated per-modality query vectors.
-#   """
-#
-#     def __init__(self,
-#                  modalities,
-#                  num_outputs,
-#                  output_num_channels,
-#                  min_padding_size=2,
-#                  subsampled_index_dims=None,
-#                  **decoder_kwargs):
-#         super().__init__()
-#
-#         if type(modalities) is dict:
-#             modalities = nn.ModuleDict(modalities)
-#
-#         self._modalities = modalities
-#         self._subsampled_index_dims = subsampled_index_dims
-#         self._min_padding_size = min_padding_size
-#         self._output_num_channels = output_num_channels
-#         self._num_outputs = num_outputs
-#
-#         query_channels = (max(m.n_query_channels() for m in self._modalities.values()) + self._min_padding_size)
-#         self.query_channels = query_channels
-#
-#         self.padding_embeddings = nn.ModuleDict()
-#
-#         # Use trainable encodings to pad all queries to the same number of channels.
-#         for modality_name, modality in self._modalities.items():
-#             pos = position_encoding.TrainablePositionEncoding(
-#                 index_dim=1,
-#                 num_channels=query_channels - modality.n_query_channels(),
-#                 init_scale=0.02)
-#             self.padding_embeddings[modality_name] = pos
-#
-#         self._decoder = BasicDecoder(
-#             query_channels=query_channels,
-#             output_index_dims=(num_outputs,),
-#             output_num_channels=output_num_channels,
-#             position_encoding_type='none',
-#             **decoder_kwargs)
-#
-#
-#
-#     def output_shape(self, inputs):
-#         if self._subsampled_index_dims is not None:
-#             subsampled_index_dims = sum(self._subsampled_index_dims.values())
-#         else:
-#             subsampled_index_dims = self._num_outputs
-#         return ((inputs.shape[0], subsampled_index_dims, self._output_num_channels),
-#                 self._subsampled_index_dims)
-#
-#     def forward(self, query, latents, *, query_mask=None):
-#         # B x 1 x num_classes -> B x num_classes
-#         return self._decoder(query, latents)
-#
-#     def set_haiku_params(self, params):
-#         params = {key[key.find('/') + 1:]: params[key] for key in params.keys()}
-#
-#         decoder_params = {key[key.find('/') + 1:]: params.pop(key) for key in list(params.keys()) if
-#                           key.startswith("basic_decoder")}
-#         self._decoder.set_haiku_params(decoder_params)
-#         for modality in self._modalities.keys():
-#             self.padding_embeddings[modality].set_haiku_params(params.pop(f"{modality}_padding"))
-#
-#         if len(params) != 0:
-#             warnings.warn(f"Some parameters couldn't be matched to model: {params.keys()}")

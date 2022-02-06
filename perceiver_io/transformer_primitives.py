@@ -138,6 +138,9 @@ class Attention(nn.Module):
 
         attention = (q @ k.transpose(-2, -1))
 
+        # scale = (q_head_dim ** -0.25)
+        # attention = (scale * q) @ (scale * k.transpose(-2, -1))
+
 
         if attention_bias is not None:
             attention += attention_bias
