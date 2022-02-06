@@ -189,7 +189,7 @@ class Attention(nn.Module):
         init_linear_from_haiku(self.final, params.pop("linear_3"))
 
         if len(params) != 0:
-            warnings.warn(f"Some parameters couldn"t be matched to model: {params.keys()}")
+            warnings.warn(f"Some parameters couldn't be matched to model: {params.keys()}")
 
 
 class MLP(nn.Module):
