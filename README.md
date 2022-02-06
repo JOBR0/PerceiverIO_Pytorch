@@ -55,8 +55,8 @@ class Perceiver(nn.Module):
         num_latent_channels (int): Number of channels for the latent vectors. Default: 1024,
         final_project (bool): Whether to apply a linear layer to the outputs before the post-processors. Default: True,
         final_project_out_channels (int): Number of output channels for the final projection layer. Default: None,
-        perceiver_encoder_kwargs (Dict): Additional arguments for the perceiver encoder {},
-        perceiver_decoder_kwargs (Dict): Additional arguments for the perceiver decoder {},
+        perceiver_encoder_kwargs (Dict): Additional arguments for the perceiver encoder class. Default: {},
+        perceiver_decoder_kwargs (Dict): Additional arguments for the perceiver decoder class. Default: {},
         input_preprocessors (dict / nn.Module): Optional input preprocessors. 1 or none for each modality. Default: None,
         output_postprocessors (dict / nn.Module): Optional output postprocessors. 1 or none for each modality. Default: None,
         output_queries (dict / nn.Module): Modules that create the output queries. 1 for each modality. Default: None,
@@ -70,17 +70,17 @@ class Perceiver(nn.Module):
 
 
 
-### Input preprocessors
+### Input preprocessors (optional)
 Input preprocessors take the raw input data and preprocess it so that it can be queried by the 
-first cross-attention. This can be something like creating patches from an image. Usually positional encodings are
-added by the preprocessor. Instead of using a preprocessor, the inputs can also be processed externally.
+first cross-attention. This can be e.g. something like creating patches from an image. Usually positional encodings are
+incorporated by the preprocessor. Instead of using a preprocessor, the inputs can also be processed manually.
 
-### Output postprocessors
-Output postprocessors take the final output of the perceiver and process it to the final format.
+### Output postprocessors (optional)
+Output postprocessors take the final output of the perceiver and process it to obtain the desired output format.
 
 ### Output queries
 Ouput queries create the features that are used to query the final latent representation of the perceiver to produce the output.
-They are passed the preprocessed input so that they can use it if desired. They also usually add positional encodings.
+They obtain the preprocessed input as an argument so that they can use it if desired. They also usually incorporate positional encodings.
 
 
 ###Multiple modalities
