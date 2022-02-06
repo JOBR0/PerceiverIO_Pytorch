@@ -1,8 +1,6 @@
 import os
 
-import cv2
 import numpy as np
-import imageio
 import matplotlib.pyplot as plt
 
 import torch
@@ -50,54 +48,14 @@ checkpoint = torch.load(ckpt_file, map_location=device)
 
 perceiver.load_state_dict(checkpoint["model_state_dict"])
 
-# img = load_image("./sample_data/dalmation.jpg", device)
-#
-#
-#
-#
-# h, w = img.shape[2:]
-# # crop to square and then resize to 224x224
-# min_size = min(h, w)
-# img_norm = transforms.functional.resized_crop(img, top=int(h/2-min_size/2), left=int(w/2-min_size/2), height=min_size, width=min_size, size=img_size)
-#
-# img_norm2 = normalize(img_norm)
+img = load_image("./sample_data/dalmation.jpg", device)
 
-with open("sample_data/dalmation.jpg", "rb") as f:
-    img = imageio.imread(f)
-
-
-def normalize(im):
-    return (im - np.array(MEAN_RGB)) / np.array(STDDEV_RGB)
-
-
-def resize_and_center_crop(image):
-    """Crops to center of image with padding then scales."""
-    shape = image.shape
-
-    image_height = shape[0]
-    image_width = shape[1]
-
-    padded_center_crop_size = ((224 / (224 + 32)) *
-                               np.minimum(image_height, image_width).astype(np.float32)).astype(np.int32)
-
-    offset_height = ((image_height - padded_center_crop_size) + 1) // 2
-    offset_width = ((image_width - padded_center_crop_size) + 1) // 2
-    crop_window = [offset_height, offset_width,
-                   padded_center_crop_size, padded_center_crop_size]
-
-    # image = tf.image.crop_to_bounding_box(image_bytes, *crop_window)
-    image = image[crop_window[0]:crop_window[0] + crop_window[2], crop_window[1]:crop_window[1] + crop_window[3]]
-    return cv2.resize(image, (224, 224), interpolation=cv2.INTER_CUBIC)
-
-
-# Obtain a [224, 224] crop of the image while preserving aspect ratio.
-# With Fourier position encoding, no resize is needed -- the model can
-# generalize to image sizes it never saw in training
-centered_img = resize_and_center_crop(img)  # img
-
-img_norm = normalize(centered_img)[None]
-img_norm = torch.from_numpy(img_norm)
-img_norm = img_norm.permute(0, 3, 1, 2).float()
+h, w = img.shape[2:]
+# crop to square and then resize to 224x224
+min_size = min(h, w)
+img_norm = transforms.functional.resized_crop(img, top=int(h / 2 - min_size / 2), left=int(w / 2 - min_size / 2),
+                                              height=min_size, width=min_size, size=img_size)
+img_norm = normalize(img_norm)
 img_norm = img_norm.to(device)
 
 with torch.inference_mode():
@@ -119,6 +77,6 @@ for i in range(top_probs.shape[1]):
 dump_pickle(logits.numpy(), f"temp/output_{str(prep_type)}_torch.pickle")
 
 # Show prediciton
-plt.imshow(img)
+plt.imshow((img[0].permute(1, 2, 0).numpy()/255))
 plt.title(f"Label: {top_labels[0]}")
 plt.show()
