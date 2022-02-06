@@ -103,7 +103,7 @@ with torch.inference_mode():
 from utils.utils import dump_pickle
 
 output_torch = {k: reconstruction[k].cpu().numpy() for k in reconstruction.keys()}
-output_torch["image"].swapaxes(-3, -1)
+output_torch["image"] = np.moveaxis(output_torch["image"], -3, -1)
 dump_pickle(output_torch, "temp/output_multi_torch.pickle")  # TODO remove
 
 # Save outputs
@@ -150,7 +150,7 @@ with torch.inference_mode():
     reconstruction["label"] = torch.mean(reconstruction["label"], dim=1)
 
 output_torch = {k: reconstruction[k].cpu().numpy() for k in reconstruction.keys()}
-output_torch["image"].swapaxes(-3, -1)
+output_torch["image"] = np.moveaxis(output_torch["image"], -3, -1)
 dump_pickle(output_torch, "temp/output_multi_torch_full.pickle")  # TODO remove
 
 # Save outputs
