@@ -23,6 +23,8 @@ def pad(max_sequence_length: int, inputs, input_mask):
     return padded_inputs, padded_mask
 
 
+MAX_SEQ_LEN = 2048
+
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 tokenizer = BytesTokenizer()
@@ -37,8 +39,6 @@ if not os.path.isfile(ckpt_file):
     raise ValueError("Please download the model checkpoint and place it in /pytorch_checkpoints")
 checkpoint = torch.load(ckpt_file, map_location=device)
 perceiver.load_state_dict(checkpoint['model_state_dict'])
-
-MAX_SEQ_LEN = 2048
 
 input_str = "This is an incomplete sentence where some words are missing."
 
@@ -63,7 +63,7 @@ input_mask = torch.from_numpy(input_mask).bool().to(device)
 with torch.inference_mode():
     out = perceiver(inputs, input_masks=input_mask)
 
-dump_pickle(out.cpu().numpy(), "temp/output_language_torch.pickle") # TODO: remove
+dump_pickle(out.cpu().numpy(), "temp/output_language_torch.pickle")  # TODO: remove
 
 masked_tokens_predictions = out[0, 51:60].argmax(axis=-1)
 print("Greedy predictions:")
