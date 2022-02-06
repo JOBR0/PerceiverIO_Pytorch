@@ -1,38 +1,25 @@
 import warnings
-from enum import Enum
-from typing import Sequence
+from typing import Sequence, Union
 
 import torch
 import torch.nn as nn
 
 from perceiver_io import position_encoding
-from perceiver_io.position_encoding import AbstractPositionEncoding, build_position_encoding, PosEncodingType
-from utils.utils import unravel_index, init_linear_from_haiku
+from perceiver_io.position_encoding import PosEncodingType
+from utils.utils import unravel_index
 
 
 class BasicQuery(nn.Module):
-    """Cross-attention-based decoder.
+    """Basic Query with positional encoding.
     Args:
-        output_num_channels (int): Number of channels to which output is projected if final_project is True.
-        position_encoding_type (str) Default: "trainable".
-        # Ignored if position_encoding_type == "none":
         output_index_dims (int):  Default: None.
-        subsampled_index_dims (int): None,
-        num_latent_channels (int):  Number of channels in latent variables. Default: 1024,
-        qk_channels (int):  Default: None,
-        v_channels (int): Default: None,
-        use_query_residual (bool):  Default: False,
-        output_w_init: str = "lecun_normal",
         concat_preprocessed_input: bool = False,
-        num_heads (int): Number of heads for attention. Default: 1,
-        final_project (bool): Whether to apply final linear layer. Default: True,
-        query_channels (int): Number of channels of the query features that are used for the cross-attention.
-            If set to None, the channels are set according to teh position encoding. Default: None.
+        position_encoding_type (PosEncodingType) Default: PosEncodingType.TRAINABLE.
         **position_encoding_kwargs
     """
 
     def __init__(self,
-                 output_index_dims: int = None,
+                 output_index_dims: Union[int, Sequence[int]] = None,
                  concat_preprocessed_input: bool = False,
                  preprocessed_input_channels: int = None,
                  position_encoding_type: PosEncodingType = PosEncodingType.TRAINABLE,
@@ -65,14 +52,8 @@ class BasicQuery(nn.Module):
     def forward(self, inputs, inputs_without_pos=None, subsampled_points=None):
         N = inputs.shape[0]
 
-
-
         if self._position_encoding is not None:
             if subsampled_points is not None:
-                # unravel_index returns a tuple (x_idx, y_idx, ...)
-                # stack to get the [n, d] tensor of coordinates
-                # pos = torch.stack(torch.unravel_index(subsampled_points, self._output_index_dim), dim=1)
-
                 pos = unravel_index(subsampled_points, self._output_index_dim)
                 # Map these coordinates to [-1, 1]
                 pos = -1 + 2 * pos / torch.tensor(self._output_index_dim)[None, :]
@@ -89,8 +70,6 @@ class BasicQuery(nn.Module):
         else:
             pos_emb = None
 
-
-
         if self._concat_preprocessed_input:
             if inputs_without_pos is None:
                 raise ValueError("Value is required for inputs_without_pos if"
@@ -103,8 +82,6 @@ class BasicQuery(nn.Module):
         return pos_emb
 
     def set_haiku_params(self, params):
-        # params = {key[key.find("/~/") + 1:]: params[key] for key in
-        #           params.keys()}
         if self._position_encoding_type == PosEncodingType.TRAINABLE:
             params = {key[key.find("/") + 1:]: params[key] for key in params.keys()}
 
@@ -115,6 +92,7 @@ class BasicQuery(nn.Module):
 
 
 class TrainableQuery(BasicQuery):
+    """Query with trainable positional encoding."""
     def __init__(self,
                  output_index_dims: int = None,
                  concat_preprocessed_input: bool = False,
@@ -135,8 +113,9 @@ class TrainableQuery(BasicQuery):
 
 
 class FourierQuery(BasicQuery):
+    """Query with Fourier positional encoding."""
     def __init__(self,
-                 output_index_dims: int = None,
+                 output_index_dims: Union[int, Sequence[int]] = None,
                  concat_preprocessed_input: bool = False,
                  preprocessed_input_channels: int = None,
                  num_bands=64,
@@ -159,10 +138,11 @@ class FourierQuery(BasicQuery):
 
 class FlowQuery(BasicQuery):
     """This query just passes the inputs as query."""
+
     def __init__(self,
                  preprocessed_input_channels: int,
                  output_img_size: Sequence[int],
-                 output_num_channels: int = 2,):
+                 output_num_channels: int = 2, ):
         super().__init__(output_index_dims=tuple(output_img_size) + (output_num_channels,),
                          concat_preprocessed_input=True,
                          preprocessed_input_channels=preprocessed_input_channels,

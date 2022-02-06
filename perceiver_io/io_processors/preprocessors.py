@@ -1,8 +1,6 @@
 import math
 import warnings
-from typing import Any, Callable, Mapping, Optional, Sequence, Tuple
-
-import einops
+from typing import Optional, Sequence, Tuple
 
 from timm.models.layers import lecun_normal_, trunc_normal_
 
@@ -14,8 +12,7 @@ import torch.nn.functional as F
 from perceiver_io import position_encoding
 from perceiver_io.io_processors.processor_utils import PreprocessorOutputT, Conv2DDownsample, space_to_depth
 from perceiver_io.position_encoding import PosEncodingType, TrainablePositionEncoding
-from utils.utils import conv_output_shape, init_linear_from_haiku, same_padding, init_conv_from_haiku, \
-    init_batchnorm_from_haiku, init_embedding_from_haiku
+from utils.utils import init_linear_from_haiku, init_conv_from_haiku, init_embedding_from_haiku
 
 
 class EmbeddingPreprocessor(nn.Module):
@@ -141,6 +138,7 @@ class ImagePreprocessor(nn.Module):
 
         # Stack MLPs to get a deeper positional embedding.
         self._n_extra_pos_mlp = n_extra_pos_mlp
+        # TODO
         if n_extra_pos_mlp != 0:
             raise NotImplementedError
 

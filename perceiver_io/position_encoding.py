@@ -1,7 +1,6 @@
 """Position encodings and utilities."""
 
 import abc
-import functools
 import math
 import warnings
 from enum import Enum

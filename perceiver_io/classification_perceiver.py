@@ -9,11 +9,9 @@ import torch
 from perceiver_io.io_processors.postprocessors import ClassificationPostprocessor
 from perceiver_io.io_processors.preprocessors import ImagePreprocessor
 from perceiver_io.output_queries import TrainableQuery
-from perceiver_io.perceiver import PerceiverEncoder, Perceiver
-
+from perceiver_io.perceiver import Perceiver
 
 from perceiver_io.position_encoding import PosEncodingType
-
 
 
 class PrepType(Enum):
@@ -26,18 +24,17 @@ class ClassificationPerceiver(nn.Module):
     """
     ClassificationPerceiver: Perceiver for image classification
     Args:
-        num_classes (int): Number of classes. Default 1000.
-        img_size (Sequence[int]: Size of images [H, W]. Default (224, 224).
-        prep_type (str): Preprocessing type. Default "fourier_pos_convnet".
+        num_classes (int): Number of classes. Default: 1000.
+        img_size (Sequence[int]): Size of images [H, W]. Default: (224, 224).
+        prep_type (str): Preprocessing type. Default: PrepType.FOURIER_POS_CONVNET.
     """
 
     def __init__(self,
                  num_classes: int = 1000,
                  img_size: Sequence[int] = (224, 224),
+                 img_channels: int = 3,
                  prep_type: PrepType = PrepType.FOURIER_POS_CONVNET):
         super().__init__()
-
-        img_channels = 3
 
         if prep_type == PrepType.FOURIER_POS_CONVNET:
             input_preprocessor = ImagePreprocessor(
@@ -87,7 +84,7 @@ class ClassificationPerceiver(nn.Module):
 
         perceiver_encoder_kwargs = dict(
             num_self_attend_heads=8,
-            use_query_residual=True,)
+            use_query_residual=True, )
 
         decoder_query_residual = False if prep_type == PrepType.LEARNED_POS_1X1CONV else True
 
@@ -146,7 +143,8 @@ class ClassificationPerceiver(nn.Module):
                                    key.startswith("image_preprocessor")}
             preprocessor_state = {key[key.find("/") + 1:]: state.pop(key) for key in list(state.keys()) if
                                   key.startswith("image_preprocessor")}
-            self.perceiver._multi_preprocessor._preprocessors["default"].set_haiku_params(preprocessor_params, preprocessor_state)
+            self.perceiver._multi_preprocessor._preprocessors["default"].set_haiku_params(preprocessor_params,
+                                                                                          preprocessor_state)
 
             if len(params) != 0:
                 warnings.warn(f"Some parameters couldn't be matched to model: {params.keys()}")

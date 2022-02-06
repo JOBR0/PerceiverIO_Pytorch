@@ -1,20 +1,14 @@
 import warnings
-from typing import Any, Callable, Mapping, Optional, Sequence, Tuple
+from typing import Mapping, Optional, Sequence
 
-import einops
-
-from timm.models.layers import lecun_normal_, trunc_normal_
+from timm.models.layers import lecun_normal_
 
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
-from perceiver_io import position_encoding
 from perceiver_io.io_processors.processor_utils import ModalitySizeT, reverse_space_to_depth
-from perceiver_io.position_encoding import PosEncodingType
-from utils.utils import conv_output_shape, init_linear_from_haiku, same_padding, init_conv_from_haiku, \
-    init_batchnorm_from_haiku, init_embedding_from_haiku
+from utils.utils import init_linear_from_haiku
 
 
 class EmbeddingPostprocessor(nn.Module):

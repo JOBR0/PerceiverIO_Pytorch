@@ -1,4 +1,3 @@
-import abc
 import warnings
 from typing import Mapping, Dict, Optional, Union
 
@@ -10,9 +9,7 @@ from timm.models.layers import lecun_normal_
 from perceiver_io import position_encoding
 from perceiver_io.io_processors.processor_utils import PreprocessorT, PreprocessorOutputT
 from perceiver_io.transformer_primitives import CrossAttention, SelfAttention, make_cross_attention_mask
-from utils.utils import init_linear_from_haiku, unravel_index
-
-from utils.utils import dump_pickle
+from utils.utils import init_linear_from_haiku
 
 ModalitySizeT = Mapping[str, int]
 

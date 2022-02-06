@@ -1,21 +1,15 @@
-"""IO pre- and post-processors for Perceiver."""
-
-import math
 import warnings
 from typing import Any, Callable, Mapping, Optional, Sequence, Tuple
 
 import einops
 
-from timm.models.layers import lecun_normal_, trunc_normal_
+from timm.models.layers import trunc_normal_
 
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from perceiver_io import position_encoding
-from perceiver_io.position_encoding import PosEncodingType
-from utils.utils import conv_output_shape, init_linear_from_haiku, same_padding, init_conv_from_haiku, \
+from utils.utils import conv_output_shape, same_padding, init_conv_from_haiku, \
     init_batchnorm_from_haiku
 
 ModalitySizeT = Mapping[str, int]
@@ -26,6 +20,7 @@ PostprocessorT = Callable[..., Any]
 PreprocessorOutputT = Tuple[torch.Tensor, Optional[torch.Tensor], torch.Tensor]
 PreprocessorT = Callable[..., PreprocessorOutputT]
 PostprocessorT = Callable[..., Any]
+
 
 def reverse_space_to_depth(
         frames: torch.Tensor,
@@ -212,7 +207,6 @@ class Conv2DDownsample(nn.Module):
         if len(state) != 0:
             warnings.warn(f"Some state variables couldn't be matched to model: {state.keys()}")
 
-
 # class Conv2DUpsample(nn.Module):
 #     """Upsamples 4x using 2 2D transposed convolutions."""
 #
@@ -306,4 +300,3 @@ class Conv2DDownsample(nn.Module):
 #                 x = F.relu(x)
 #
 #         return x
-
