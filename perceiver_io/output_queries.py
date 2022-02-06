@@ -14,8 +14,8 @@ class BasicQuery(nn.Module):
     """Cross-attention-based decoder.
     Args:
         output_num_channels (int): Number of channels to which output is projected if final_project is True.
-        position_encoding_type (str) Default: 'trainable'.
-        # Ignored if position_encoding_type == 'none':
+        position_encoding_type (str) Default: "trainable".
+        # Ignored if position_encoding_type == "none":
         output_index_dims (int):  Default: None.
         subsampled_index_dims (int): None,
         num_latent_channels (int):  Number of channels in latent variables. Default: 1024,
@@ -93,8 +93,8 @@ class BasicQuery(nn.Module):
 
         if self._concat_preprocessed_input:
             if inputs_without_pos is None:
-                raise ValueError('Value is required for inputs_without_pos if'
-                                 ' concat_preprocessed_input is True')
+                raise ValueError("Value is required for inputs_without_pos if"
+                                 " concat_preprocessed_input is True")
             if pos_emb is None:
                 pos_emb = inputs
             else:
@@ -106,7 +106,7 @@ class BasicQuery(nn.Module):
         # params = {key[key.find("/~/") + 1:]: params[key] for key in
         #           params.keys()}
         if self._position_encoding_type == PosEncodingType.TRAINABLE:
-            params = {key[key.find('/') + 1:]: params[key] for key in params.keys()}
+            params = {key[key.find("/") + 1:]: params[key] for key in params.keys()}
 
             self._position_encoding.set_haiku_params(params.pop("trainable_position_encoding"))
 

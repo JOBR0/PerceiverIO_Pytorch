@@ -27,11 +27,11 @@ class BytesTokenizer:
     inputs_no_special = (
         inputs[inputs >= self._num_reserved_tokens] - self._num_reserved_tokens)
     decoded_bytes = inputs_no_special.astype(np.uint8).tobytes()
-    return decoded_bytes.decode('utf-8', errors='replace')
+    return decoded_bytes.decode("utf-8", errors="replace")
 
   def to_int(self, inputs: Union[str, bytes]) -> np.ndarray:
     if isinstance(inputs, str):
-      inputs = inputs.encode('utf-8')
+      inputs = inputs.encode("utf-8")
     encoded = np.frombuffer(inputs, np.uint8).astype(np.int32)
     encoded = encoded + self._num_reserved_tokens
     return encoded.astype(np.int32)

@@ -66,7 +66,7 @@ class ImagePreprocessor(nn.Module):
     Args:
         img_size (Sequence[int]): The size of the image to be processed (HxW).
         input_channels (int): The number of channels of the input image. Default: 3.
-        prep_type (str): How to process data ('conv' | 'patches' | 'pixels' | 'conv1x1'). Default: 'conv'
+        prep_type (str): How to process data ("conv" | "patches" | "pixels" | "conv1x1"). Default: "conv"
         spatial_downsample (int): Factor by which to downsample spatial dimensions. Default: 4
         temporal_downsample (int): Factor by which to downsample temporal dimensiton (e.g. video). Default: 1
         """
@@ -76,7 +76,7 @@ class ImagePreprocessor(nn.Module):
             img_size: Sequence[int],
             num_frames: int = 1,
             input_channels: int = 3,
-            prep_type: str = 'conv',
+            prep_type: str = "conv",
             spatial_downsample: int = 4,
             temporal_downsample: int = 1,
             position_encoding_type: PosEncodingType = PosEncodingType.FOURIER,
@@ -84,16 +84,16 @@ class ImagePreprocessor(nn.Module):
             num_channels: int = 64,
             conv_after_patching: bool = False,
             conv2d_use_batchnorm: bool = True,
-            concat_or_add_pos: str = 'concat',
+            concat_or_add_pos: str = "concat",
             **position_encoding_kwargs):
         super().__init__()
 
-        if prep_type not in ('conv', 'patches', 'pixels', 'conv1x1'):
-            raise ValueError('Invalid prep_type!')
+        if prep_type not in ("conv", "patches", "pixels", "conv1x1"):
+            raise ValueError("Invalid prep_type!")
 
-        if concat_or_add_pos not in ['concat', 'add']:
+        if concat_or_add_pos not in ["concat", "add"]:
             raise ValueError(
-                f'Invalid value {concat_or_add_pos} for concat_or_add_pos.')
+                f"Invalid value {concat_or_add_pos} for concat_or_add_pos.")
 
         self._prep_type = prep_type
         self._spatial_downsample = spatial_downsample
@@ -102,15 +102,15 @@ class ImagePreprocessor(nn.Module):
         self._conv_after_patching = conv_after_patching
         self._position_encoding_type = position_encoding_type
 
-        if self._prep_type == 'conv':
+        if self._prep_type == "conv":
             # Downsampling with conv is currently restricted
             convnet_num_layers = math.log(spatial_downsample, 4)
             convnet_num_layers_is_int = (
                     convnet_num_layers == np.round(convnet_num_layers))
             if not convnet_num_layers_is_int or temporal_downsample != 1:
-                raise ValueError('Only powers of 4 expected for spatial '
-                                 'and 1 expected for temporal '
-                                 'downsampling with conv.')
+                raise ValueError("Only powers of 4 expected for spatial "
+                                 "and 1 expected for temporal "
+                                 "downsampling with conv.")
 
             self.convnet = Conv2DDownsample(
                 in_channels=input_channels,
@@ -118,8 +118,8 @@ class ImagePreprocessor(nn.Module):
                 num_channels=num_channels,
                 use_batchnorm=conv2d_use_batchnorm)
 
-        elif self._prep_type == 'conv1x1':
-            assert temporal_downsample == 1, 'conv1x1 does not downsample in time.'
+        elif self._prep_type == "conv1x1":
+            assert temporal_downsample == 1, "conv1x1 does not downsample in time."
             self.convnet_1x1 = nn.Conv2d(
                 in_channels=input_channels,
                 out_channels=num_channels,
@@ -160,7 +160,7 @@ class ImagePreprocessor(nn.Module):
         else:
             self.output_channels = num_channels
 
-        if concat_or_add_pos == 'concat':
+        if concat_or_add_pos == "concat":
             self.output_channels += self._positional_encoding.n_output_channels()
 
     def n_output_channels(self):
@@ -192,9 +192,9 @@ class ImagePreprocessor(nn.Module):
             sh = inputs.shape
             pos_enc = torch.reshape(pos_enc, list(sh)[:-1] + [-1])
 
-        if self._concat_or_add_pos == 'concat':
+        if self._concat_or_add_pos == "concat":
             inputs_with_pos = torch.cat([inputs, pos_enc], dim=-1)
-        elif self._concat_or_add_pos == 'add':
+        elif self._concat_or_add_pos == "add":
             inputs_with_pos = inputs + pos_enc
 
         return inputs_with_pos, inputs
@@ -226,7 +226,7 @@ class ImagePreprocessor(nn.Module):
                 inputs = inputs.view(b, t, *inputs.shape[1:])
 
 
-        elif self._prep_type == 'patches':
+        elif self._prep_type == "patches":
             # Move channel dimension to the end
             inputs = inputs.movedim(-3, -1)
             # Space2depth featurization.
@@ -242,7 +242,7 @@ class ImagePreprocessor(nn.Module):
 
             if self._conv_after_patching:
                 inputs = self._conv_after_patch_layer(inputs)
-        elif self._prep_type == 'pixels':
+        elif self._prep_type == "pixels":
             # Move channel dimension to the end
             inputs = inputs.movedim(-3, -1)
             # if requested, downsamples in the crudest way
@@ -253,28 +253,28 @@ class ImagePreprocessor(nn.Module):
                 inputs = inputs[:, ::self._temporal_downsample,
                          ::self._spatial_downsample, ::self._spatial_downsample]
             else:
-                raise ValueError('Unsupported data format for pixels.')
+                raise ValueError("Unsupported data format for pixels.")
 
         inputs, inputs_without_pos = self._build_network_inputs(
             inputs, pos, network_input_is_1d)
         return inputs, inputs_without_pos
 
     def set_haiku_params(self, params, state=None):
-        params = {key[key.find('/') + 1:]: params[key] for key in params.keys()}
+        params = {key[key.find("/") + 1:]: params[key] for key in params.keys()}
 
         if state is not None:
-            state = {key[key.find('/') + 1:]: state[key] for key in state.keys()}
+            state = {key[key.find("/") + 1:]: state[key] for key in state.keys()}
 
         if self._prep_type == "conv":
-            conv2_d_downsample_params = {key[key.find('/') + 1:]: params.pop(key) for key in list(params.keys()) if
+            conv2_d_downsample_params = {key[key.find("/") + 1:]: params.pop(key) for key in list(params.keys()) if
                                          key.startswith("conv2_d_downsample")}
-            conv2_d_downsample_state = {key[key.find('/') + 1:]: state.pop(key) for key in list(state.keys()) if
+            conv2_d_downsample_state = {key[key.find("/") + 1:]: state.pop(key) for key in list(state.keys()) if
                                         key.startswith("conv2_d_downsample")}
             self.convnet.set_haiku_params(conv2_d_downsample_params, conv2_d_downsample_state)
         elif self._prep_type == "conv1x1":
             init_conv_from_haiku(self.convnet_1x1, params.pop("conv2_d"))
 
-        position_encoding_projector = {key[key.find('/') + 1:]: params.pop(key) for key in list(params.keys()) if
+        position_encoding_projector = {key[key.find("/") + 1:]: params.pop(key) for key in list(params.keys()) if
                                        key.startswith("position_encoding_projector")}
 
         if len(position_encoding_projector) > 0:
@@ -323,20 +323,20 @@ class AudioPreprocessor(nn.Module):
     def __init__(
             self,
             samples_per_batch: int,
-            prep_type: str = 'patches',
+            prep_type: str = "patches",
             samples_per_patch: int = 96,
-            position_encoding_type: str = 'fourier',
+            position_encoding_type: str = "fourier",
             n_extra_pos_mlp: int = 0,
-            concat_or_add_pos: str = 'concat',
+            concat_or_add_pos: str = "concat",
             **position_encoding_kwargs):
         super().__init__()
 
-        if prep_type not in ('patches',):
-            raise ValueError('Invalid prep_type!')
+        if prep_type not in ("patches",):
+            raise ValueError("Invalid prep_type!")
 
-        if concat_or_add_pos not in ['concat', 'add']:
+        if concat_or_add_pos not in ["concat", "add"]:
             raise ValueError(
-                f'Invalid value {concat_or_add_pos} for concat_or_add_pos.')
+                f"Invalid value {concat_or_add_pos} for concat_or_add_pos.")
 
         self._samples_per_patch = samples_per_patch
         self._concat_or_add_pos = concat_or_add_pos
@@ -362,7 +362,7 @@ class AudioPreprocessor(nn.Module):
 
         self.output_channels = samples_per_patch
 
-        if concat_or_add_pos == 'concat':
+        if concat_or_add_pos == "concat":
             self.output_channels += self._positional_encoding.n_output_channels()
 
     def n_output_channels(self):
@@ -383,9 +383,9 @@ class AudioPreprocessor(nn.Module):
             if i < (self._n_extra_pos_mlp - 1):
                 pos_enc = F.relu(pos_enc)
 
-        if self._concat_or_add_pos == 'concat':
+        if self._concat_or_add_pos == "concat":
             inputs_with_pos = torch.cat([inputs, pos_enc], dim=-1)
-        elif self._concat_or_add_pos == 'add':
+        elif self._concat_or_add_pos == "add":
             inputs_with_pos = inputs + pos_enc
 
         return inputs_with_pos, inputs

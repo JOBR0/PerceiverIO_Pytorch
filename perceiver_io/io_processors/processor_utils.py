@@ -34,16 +34,16 @@ def reverse_space_to_depth(
     """Reverse space to depth transform."""
     if len(frames.shape) == 4:
         return einops.rearrange(
-            frames, 'b h w (dh dw c) -> b (h dh) (w dw) c',
+            frames, "b h w (dh dw c) -> b (h dh) (w dw) c",
             dh=spatial_block_size, dw=spatial_block_size)
     elif len(frames.shape) == 5:
         return einops.rearrange(
-            frames, 'b t h w (dt dh dw c) -> b (t dt) (h dh) (w dw) c',
+            frames, "b t h w (dt dh dw c) -> b (t dt) (h dh) (w dw) c",
             dt=temporal_block_size, dh=spatial_block_size, dw=spatial_block_size)
     else:
         raise ValueError(
-            'Frames should be of rank 4 (batch, height, width, channels)'
-            ' or rank 5 (batch, time, height, width, channels)')
+            "Frames should be of rank 4 (batch, height, width, channels)"
+            " or rank 5 (batch, time, height, width, channels)")
 
 
 def space_to_depth(
@@ -53,23 +53,23 @@ def space_to_depth(
     """Space to depth transform."""
     if len(frames.shape) == 4:
         return einops.rearrange(
-            frames, 'b (h dh) (w dw) c -> b h w (dh dw c)',
+            frames, "b (h dh) (w dw) c -> b h w (dh dw c)",
             dh=spatial_block_size, dw=spatial_block_size)
     elif len(frames.shape) == 5:
         return einops.rearrange(
-            frames, 'b (t dt) (h dh) (w dw) c -> b t h w (dt dh dw c)',
+            frames, "b (t dt) (h dh) (w dw) c -> b t h w (dt dh dw c)",
             dt=temporal_block_size, dh=spatial_block_size, dw=spatial_block_size)
     else:
         raise ValueError(
-            'Frames should be of rank 4 (batch, height, width, channels)'
-            ' or rank 5 (batch, time, height, width, channels)')
+            "Frames should be of rank 4 (batch, height, width, channels)"
+            " or rank 5 (batch, time, height, width, channels)")
 
 
 def extract_patches(images: torch.Tensor,
                     size: Sequence[int],
                     stride: Sequence[int] = 1,
                     dilation: Sequence[int] = 1,
-                    padding: str = 'VALID') -> torch.Tensor:
+                    padding: str = "VALID") -> torch.Tensor:
     """Extract patches from images.
   The function extracts patches of shape sizes from the input images in the same
   manner as a convolution with kernel of shape sizes, stride equal to strides,
@@ -89,7 +89,7 @@ def extract_patches(images: torch.Tensor,
 
     if images.ndim != 4:
         raise ValueError(
-            f'Rank of images must be 4 (got tensor of shape {images.shape})')
+            f"Rank of images must be 4 (got tensor of shape {images.shape})")
 
     n, c, h, w = images.shape
     ph, pw = size
@@ -112,13 +112,13 @@ def patches_for_flow(inputs: torch.Tensor) -> torch.Tensor:
     batch_size = inputs.shape[0]
 
     inputs = einops.rearrange(inputs, "N T C H W -> (N T) C H W")
-    padded_inputs = F.pad(inputs, [1, 1, 1, 1], mode='constant')
+    padded_inputs = F.pad(inputs, [1, 1, 1, 1], mode="constant")
     outputs = extract_patches(
         padded_inputs,
         size=[3, 3],
         stride=1,
         dilation=1,
-        padding='VALID')
+        padding="VALID")
 
     outputs = einops.rearrange(outputs, "(N T) H W C-> N T H W C", N=batch_size)
 
@@ -173,7 +173,7 @@ class Conv2DDownsample(nn.Module):
         out = inputs
         for l, conv in enumerate(self.convs):
             pad = same_padding(out.shape[1:], conv.kernel_size, conv.stride, dims=2)
-            out = F.pad(out, pad, mode='constant', value=0.0)
+            out = F.pad(out, pad, mode="constant", value=0.0)
             out = conv(out)
 
             if self.norms is not None:
@@ -182,15 +182,15 @@ class Conv2DDownsample(nn.Module):
             out = F.relu(out)
 
             pad = same_padding(out.shape[1:], 3, 2, dims=2)
-            out = F.pad(out, pad, mode='constant', value=0.0)
+            out = F.pad(out, pad, mode="constant", value=0.0)
 
             out = F.max_pool2d(out, kernel_size=3, stride=2)
 
         return out
 
     def set_haiku_params(self, params, state):
-        params = {key[key.find('/') + 1:]: params[key] for key in params.keys()}
-        state = {key[key.find('/') + 1:]: state[key] for key in state.keys()}
+        params = {key[key.find("/") + 1:]: params[key] for key in params.keys()}
+        state = {key[key.find("/") + 1:]: state[key] for key in state.keys()}
 
         for l, conv in enumerate(self.convs):
             suffix = "" if l == 0 else f"_{l}"
@@ -199,10 +199,10 @@ class Conv2DDownsample(nn.Module):
             if self.norms is not None:
                 name = "batchnorm" + suffix
 
-                norm_state = {key[key.find('/') + 1:]: state.pop(key) for key in list(state.keys()) if
+                norm_state = {key[key.find("/") + 1:]: state.pop(key) for key in list(state.keys()) if
                               key.startswith(name)}
 
-                norm_state = {key[key.find('/') + 1:]: norm_state[key] for key in norm_state.keys()}
+                norm_state = {key[key.find("/") + 1:]: norm_state[key] for key in norm_state.keys()}
 
                 init_batchnorm_from_haiku(self.norms[l], params.pop(name), norm_state)
 
@@ -241,8 +241,8 @@ class Conv2DDownsample(nn.Module):
 #             kernel_shape=4,
 #             stride=2,
 #             with_bias=True,
-#             padding='SAME',
-#             name='transp_conv_1')
+#             padding="SAME",
+#             name="transp_conv_1")
 #
 #         self.transp_conv2 = nn.ConvTranspose2d(in_channels=n_outputs,
 #                                                out_channels=n_outputs,
@@ -257,8 +257,8 @@ class Conv2DDownsample(nn.Module):
 #             kernel_shape=4,
 #             stride=2,
 #             with_bias=True,
-#             padding='SAME',
-#             name='transp_conv_2')
+#             padding="SAME",
+#             name="transp_conv_2")
 #
 #     def forward(self, inputs: torch.Tensor, *,
 #                 test_local_stats: bool = False) -> torch.Tensor:  # TODO what is test_local_stats?
@@ -301,7 +301,7 @@ class Conv2DDownsample(nn.Module):
 #             x = hk.Conv3DTranspose(output_channels=channels,
 #                                    stride=[time_stride, space_stride, space_stride],
 #                                    kernel_shape=[4, 4, 4],
-#                                    name=f'conv3d_transpose_{i}')(x)
+#                                    name=f"conv3d_transpose_{i}")(x)
 #             if i != n_upsamples - 1:
 #                 x = F.relu(x)
 #

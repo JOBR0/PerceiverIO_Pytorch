@@ -34,7 +34,7 @@ class PerceiverEncoder(nn.Module):
             self_attend_widening_factor (int): Widening factor for MLP in self attention. Default:1
             dropout_prob (float): Dropout probability in self and cross attention. Default: 0.0
             latent_pos_enc_init_scale (float): Default: 0.02
-            cross_attention_shape_for_attn (str) Default: 'kv'
+            cross_attention_shape_for_attn (str) Default: "kv"
             use_query_residual (bool): Default: True
     """
 
@@ -53,17 +53,17 @@ class PerceiverEncoder(nn.Module):
             self_attend_widening_factor: int = 1,
             dropout_prob: float = 0.0,
             latent_pos_enc_init_scale: float = 0.02,
-            cross_attention_shape_for_attn: str = 'kv',
+            cross_attention_shape_for_attn: str = "kv",
             use_query_residual: bool = True):
         super().__init__()
 
         # Check that we can use multihead-attention with these shapes.
         if num_latent_channels % num_self_attend_heads != 0:
-            raise ValueError(f'num_z_channels ({num_latent_channels}) must be divisible by'
-                             f' num_self_attend_heads ({num_self_attend_heads}).')
+            raise ValueError(f"num_z_channels ({num_latent_channels}) must be divisible by"
+                             f" num_self_attend_heads ({num_self_attend_heads}).")
         if num_latent_channels % num_cross_attend_heads != 0:
-            raise ValueError(f'num_z_channels ({num_latent_channels}) must be divisible by'
-                             f' num_cross_attend_heads ({num_cross_attend_heads}).')
+            raise ValueError(f"num_z_channels ({num_latent_channels}) must be divisible by"
+                             f" num_cross_attend_heads ({num_cross_attend_heads}).")
 
         self._input_is_1d = True
 
@@ -116,16 +116,16 @@ class PerceiverEncoder(nn.Module):
         return latents
 
     def set_haiku_params(self, params):
-        params = {key[key.find('/') + 1:]: params[key] for key in params.keys()}
+        params = {key[key.find("/") + 1:]: params[key] for key in params.keys()}
 
-        cross_attention_params = {key[key.find('/') + 1:]: params.pop(key) for key in list(params.keys()) if
+        cross_attention_params = {key[key.find("/") + 1:]: params.pop(key) for key in list(params.keys()) if
                                   key.startswith("cross_attention")}
         self.cross_attend.set_haiku_params(cross_attention_params)
 
         for i, self_attend in enumerate(self.self_attends):
             suffix = "" if i == 0 else f"_{i}"
             name = "self_attention" + suffix + "/"
-            self_attention_params = {key[key.find('/') + 1:]: params.pop(key) for key in list(params.keys()) if
+            self_attention_params = {key[key.find("/") + 1:]: params.pop(key) for key in list(params.keys()) if
                                      key.startswith(name)}
             self_attend.set_haiku_params(self_attention_params)
 
@@ -177,7 +177,7 @@ class PerceiverDecoder(nn.Module):
             dropout_prob=0.0,
             num_heads=self._num_heads,
             widening_factor=1,
-            shape_for_attn='kv',
+            shape_for_attn="kv",
             qk_channels=self._qk_channels,
             v_channels=self._v_channels,
             use_query_residual=self._use_query_residual)
@@ -214,7 +214,7 @@ class PerceiverDecoder(nn.Module):
         return output
 
     def set_haiku_params(self, params):
-        cross_attention_params = {key[key.find('/') + 1:]: params.pop(key) for key in list(params.keys()) if
+        cross_attention_params = {key[key.find("/") + 1:]: params.pop(key) for key in list(params.keys()) if
                                   key.startswith("cross_attention")}
 
         self.decoding_cross_attn.set_haiku_params(cross_attention_params)

@@ -38,7 +38,7 @@ ckpt_file = "./pytorch_checkpoints/language_perceiver_io_bytes.pth"
 if not os.path.isfile(ckpt_file):
     raise ValueError("Please download the model checkpoint and place it in /pytorch_checkpoints")
 checkpoint = torch.load(ckpt_file, map_location=device)
-perceiver.load_state_dict(checkpoint['model_state_dict'])
+perceiver.load_state_dict(checkpoint["model_state_dict"])
 
 input_str = "This is an incomplete sentence where some words are missing."
 

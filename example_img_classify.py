@@ -48,7 +48,7 @@ if not os.path.isfile(ckpt_file):
 
 checkpoint = torch.load(ckpt_file, map_location=device)
 
-perceiver.load_state_dict(checkpoint['model_state_dict'])
+perceiver.load_state_dict(checkpoint["model_state_dict"])
 
 # img = load_image("./sample_data/dalmation.jpg", device)
 #
@@ -62,7 +62,7 @@ perceiver.load_state_dict(checkpoint['model_state_dict'])
 #
 # img_norm2 = normalize(img_norm)
 
-with open("sample_data/dalmation.jpg", 'rb') as f:
+with open("sample_data/dalmation.jpg", "rb") as f:
     img = imageio.imread(f)
 
 

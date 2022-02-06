@@ -58,7 +58,7 @@ class FlowPerceiver(nn.Module):
                 concat_pos=True,
             ),
             n_extra_pos_mlp=0,
-            prep_type='patches',
+            prep_type="patches",
             spatial_downsample=1,
             conv_after_patching=True,
             temporal_downsample=2,
@@ -100,15 +100,15 @@ class FlowPerceiver(nn.Module):
         """Loads the original haiku checkpoint. Requires haiku to be installed."""
         with open(file, "rb") as f:
             params = pickle.loads(f.read())
-            encoder_params = {key[key.find('/') + 1:]: params.pop(key) for key in list(params.keys()) if
+            encoder_params = {key[key.find("/") + 1:]: params.pop(key) for key in list(params.keys()) if
                               key.startswith("perceiver_encoder")}
             self.perceiver._encoder.set_haiku_params(encoder_params)
-            decoder_params = {key[key.find('basic_decoder/') + len("basic_decoder/"):]: params.pop(key) for key in
+            decoder_params = {key[key.find("basic_decoder/") + len("basic_decoder/"):]: params.pop(key) for key in
                               list(params.keys()) if
                               key.startswith("flow_decoder")}
             self.perceiver._decoder.set_haiku_params(decoder_params)
 
-            preprocessor_params = {key[key.find('/') + 1:]: params.pop(key) for key in list(params.keys()) if
+            preprocessor_params = {key[key.find("/") + 1:]: params.pop(key) for key in list(params.keys()) if
                                    key.startswith("image_preprocessor")}
             self.perceiver._multi_preprocessor._preprocessors["default"].set_haiku_params(preprocessor_params)
 

@@ -24,7 +24,7 @@ if not os.path.isfile(ckpt_file):
 
 checkpoint = torch.load(ckpt_file, map_location=device)
 
-perceiver.load_state_dict(checkpoint['model_state_dict'])
+perceiver.load_state_dict(checkpoint["model_state_dict"])
 
 img1 = load_image("./sample_data/frame_0016.png", device)
 img2 = load_image("./sample_data/frame_0017.png", device)

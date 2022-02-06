@@ -129,7 +129,7 @@ class TrainablePositionEncoding(AbstractPositionEncoding):
 
     def set_haiku_params(self, params):
         with torch.no_grad():
-            self.pos_embs.copy_(torch.from_numpy(params['pos_embs']).float())
+            self.pos_embs.copy_(torch.from_numpy(params["pos_embs"]).float())
 
 
 def _check_or_build_spatial_positions(pos, index_dims, batch_size):
@@ -243,7 +243,7 @@ def build_position_encoding(
             index_dims=index_dims,
             **fourier_position_encoding_kwargs)
     else:
-        raise ValueError(f'Unknown position encoding: {position_encoding_type}.')
+        raise ValueError(f"Unknown position encoding: {position_encoding_type}.")
 
     if project_pos_dim > 0:
         # Project the position encoding to a target dimension:

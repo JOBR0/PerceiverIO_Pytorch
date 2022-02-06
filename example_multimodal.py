@@ -42,7 +42,7 @@ def load_video(path, max_frames=0, resize=(224, 224)):
     return np.array(frames) / 255.0
 
 def save_video(path, data: np.ndarray):
-    fourcc = cv2.VideoWriter_fourcc('M','J','P','G')
+    fourcc = cv2.VideoWriter_fourcc("M","J","P","G")
     out = cv2.VideoWriter(path, fourcc, 25, (224, 224))
     for frame in data:
         out.write((frame*255).astype(np.uint8))
@@ -54,7 +54,7 @@ sample_rate, audio = scipy.io.wavfile.read("sample_data/audio.wav")
 if audio.dtype == np.int16:
     audio = audio.astype(np.float32) / 2 ** 15
 elif audio.dtype != np.float32:
-    raise ValueError('Unexpected datatype. Model expects sound samples to lie in [-1, 1]')
+    raise ValueError("Unexpected datatype. Model expects sound samples to lie in [-1, 1]")
 
 video_path = "./sample_data/video.avi"
 video = load_video(video_path)
@@ -91,7 +91,7 @@ if not os.path.isfile(ckpt_file):
 
 checkpoint = torch.load(ckpt_file, map_location=device)
 
-perceiver.load_state_dict(checkpoint['model_state_dict'])
+perceiver.load_state_dict(checkpoint["model_state_dict"])
 
 video_input = torch.from_numpy(video[None, :16]).movedim(-1, -3).float().to(device)
 audio_input = torch.from_numpy(audio[None, :16 * AUDIO_SAMPLES_PER_FRAME, 0:1]).float().to(device)

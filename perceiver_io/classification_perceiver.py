@@ -50,7 +50,7 @@ class ClassificationPerceiver(nn.Module):
                     num_bands=64,
                     sine_only=False
                 ),
-                prep_type='conv')
+                prep_type="conv")
 
         elif prep_type == PrepType.LEARNED_POS_1X1CONV:
             input_preprocessor = ImagePreprocessor(
@@ -61,11 +61,11 @@ class ClassificationPerceiver(nn.Module):
                     init_scale=0.02,
                     num_channels=256,
                 ),
-                prep_type='conv1x1',
+                prep_type="conv1x1",
                 project_pos_dim=256,
                 num_channels=256,
                 spatial_downsample=1,
-                concat_or_add_pos='concat',
+                concat_or_add_pos="concat",
             )
 
         elif prep_type == PrepType.FOURIER_POS_PIXEL:
@@ -79,7 +79,7 @@ class ClassificationPerceiver(nn.Module):
                     num_bands=64,
                     sine_only=False
                 ),
-                prep_type='pixels',
+                prep_type="pixels",
                 spatial_downsample=1,
             )
         else:
@@ -126,13 +126,13 @@ class ClassificationPerceiver(nn.Module):
             state = dict["state"]
             # convert to dict
             state = {key: state[key] for key in state}
-            encoder_params = {key[key.find('/') + 1:]: params.pop(key) for key in list(params.keys()) if
+            encoder_params = {key[key.find("/") + 1:]: params.pop(key) for key in list(params.keys()) if
                               key.startswith("perceiver_encoder")}
             self.perceiver._encoder.set_haiku_params(encoder_params)
-            # decoder_params = {key[key.find('/') + 1:]: params.pop(key) for key in list(params.keys()) if
+            # decoder_params = {key[key.find("/") + 1:]: params.pop(key) for key in list(params.keys()) if
             #                   key.startswith("classification_decoder")}
 
-            decoder_params = {key[key.find('basic_decoder/') + len("basic_decoder/"):]: params.pop(key) for key in
+            decoder_params = {key[key.find("basic_decoder/") + len("basic_decoder/"):]: params.pop(key) for key in
                               list(params.keys()) if
                               key.startswith("classification_decoder")}
 
@@ -142,9 +142,9 @@ class ClassificationPerceiver(nn.Module):
             self.perceiver._output_queries["default"].set_haiku_params(query_params)
             self.perceiver._decoder.set_haiku_params(decoder_params)
 
-            preprocessor_params = {key[key.find('/') + 1:]: params.pop(key) for key in list(params.keys()) if
+            preprocessor_params = {key[key.find("/") + 1:]: params.pop(key) for key in list(params.keys()) if
                                    key.startswith("image_preprocessor")}
-            preprocessor_state = {key[key.find('/') + 1:]: state.pop(key) for key in list(state.keys()) if
+            preprocessor_state = {key[key.find("/") + 1:]: state.pop(key) for key in list(state.keys()) if
                                   key.startswith("image_preprocessor")}
             self.perceiver._multi_preprocessor._preprocessors["default"].set_haiku_params(preprocessor_params, preprocessor_state)
 

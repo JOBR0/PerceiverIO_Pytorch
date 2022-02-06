@@ -66,10 +66,10 @@ class LanguagePerceiver(nn.Module):
 
             # convert to dict
             params = {key: params[key] for key in params}
-            encoder_params = {key[key.find('/') + 1:]: params.pop(key) for key in list(params.keys()) if
+            encoder_params = {key[key.find("/") + 1:]: params.pop(key) for key in list(params.keys()) if
                               key.startswith("perceiver_encoder")}
             self.perceiver._encoder.set_haiku_params(encoder_params)
-            decoder_params = {key[key.find('/') + 1:]: params.pop(key) for key in list(params.keys()) if
+            decoder_params = {key[key.find("/") + 1:]: params.pop(key) for key in list(params.keys()) if
                               key.startswith("basic_decoder")}
             query_params = {key: decoder_params.pop(key) for key in list(decoder_params.keys()) if
                             key.startswith("~")}

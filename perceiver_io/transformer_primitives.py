@@ -13,7 +13,7 @@ from utils.utils import init_linear_from_haiku, init_layer_norm_from_haiku
 def make_cross_attention_mask(query_mask, kv_mask):
     batch_size, query_len = query_mask.shape
     _, key_len = kv_mask.shape
-    mask = torch.einsum('bi,bj->bij', (query_mask, kv_mask))
+    mask = torch.einsum("bi,bj->bij", (query_mask, kv_mask))
     assert mask.shape == (batch_size, query_len, key_len)
     return mask
 
@@ -67,27 +67,27 @@ class Attention(nn.Module):
         self._v_channels_per_head = v_out_channels // num_heads
 
         if qk_out_channels % num_heads != 0:
-            raise ValueError(f'qk_out_channels ({qk_out_channels}) must be divisible by'
-                             f' num_heads ({num_heads}).')
+            raise ValueError(f"qk_out_channels ({qk_out_channels}) must be divisible by"
+                             f" num_heads ({num_heads}).")
         if v_out_channels % num_heads != 0:
-            raise ValueError(f'v_channels ({v_out_channels}) must be divisible by'
-                             f' num_heads ({num_heads}).')
+            raise ValueError(f"v_channels ({v_out_channels}) must be divisible by"
+                             f" num_heads ({num_heads}).")
 
         self.proj_q = nn.Linear(q_in_channels, qk_out_channels, bias=True)
         self.proj_k = nn.Linear(k_in_channels, qk_out_channels, bias=True)
         self.proj_v = nn.Linear(v_in_channels, v_out_channels, bias=True)
 
-        variance_scaling_(self.proj_q.weight, scale=init_scale, mode='fan_in', distribution='truncated_normal')
+        variance_scaling_(self.proj_q.weight, scale=init_scale, mode="fan_in", distribution="truncated_normal")
         nn.init.constant_(self.proj_q.bias, 0)
-        variance_scaling_(self.proj_k.weight, scale=init_scale, mode='fan_in', distribution='truncated_normal')
+        variance_scaling_(self.proj_k.weight, scale=init_scale, mode="fan_in", distribution="truncated_normal")
         nn.init.constant_(self.proj_k.bias, 0)
-        variance_scaling_(self.proj_v.weight, scale=init_scale, mode='fan_in', distribution='truncated_normal')
+        variance_scaling_(self.proj_v.weight, scale=init_scale, mode="fan_in", distribution="truncated_normal")
         nn.init.constant_(self.proj_v.bias, 0)
 
         self.dropout = nn.Dropout(dropout_prob)
 
         self.final = nn.Linear(v_out_channels, output_channels, bias=with_final_bias)
-        variance_scaling_(self.final.weight, scale=final_init_scale, mode='fan_in', distribution='truncated_normal')
+        variance_scaling_(self.final.weight, scale=final_init_scale, mode="fan_in", distribution="truncated_normal")
         nn.init.constant_(self.final.bias, 0)
 
     def forward(self, inputs_q, inputs_k, inputs_v, attention_mask=None, attention_bias = None, return_matrix=False):
@@ -131,7 +131,7 @@ class Attention(nn.Module):
         _, _, _, v_head_dim = v.shape
         hiddens = num_heads * v_head_dim
 
-        #attention = torch.einsum('bthd,bThd->bhtT', q, k)
+        #attention = torch.einsum("bthd,bThd->bhtT", q, k)
         q = q.permute(0, 2, 1, 3)
         k = k.permute(0, 2, 1, 3)
         v = v.permute(0, 2, 1, 3)
@@ -161,7 +161,7 @@ class Attention(nn.Module):
 
         self.dropout(normalized)
 
-        #summed = torch.einsum('bhtT,bThd->bthd', normalized, v)
+        #summed = torch.einsum("bhtT,bThd->bthd", normalized, v)
         summed = normalized @ v
         summed = summed.permute(0, 2, 1, 3)
 
@@ -189,7 +189,7 @@ class Attention(nn.Module):
         init_linear_from_haiku(self.final, params.pop("linear_3"))
 
         if len(params) != 0:
-            warnings.warn(f"Some parameters couldn't be matched to model: {params.keys()}")
+            warnings.warn(f"Some parameters couldn"t be matched to model: {params.keys()}")
 
 
 class MLP(nn.Module):
@@ -213,10 +213,10 @@ class MLP(nn.Module):
         out_channels = out_channels or in_channels
 
         self.fc1 = nn.Linear(in_channels, widening_factor * in_channels)
-        variance_scaling_(self.fc1.weight, scale=init_scale, mode='fan_in', distribution='truncated_normal')
+        variance_scaling_(self.fc1.weight, scale=init_scale, mode="fan_in", distribution="truncated_normal")
         nn.init.constant_(self.fc1.bias, 0)
         self.fc2 = nn.Linear(widening_factor * in_channels, out_channels)
-        variance_scaling_(self.fc2.weight, scale=init_scale, mode='fan_in', distribution='truncated_normal')
+        variance_scaling_(self.fc2.weight, scale=init_scale, mode="fan_in", distribution="truncated_normal")
         nn.init.constant_(self.fc2.bias, 0)
 
         self.dropout = nn.Dropout(dropout_prob)
@@ -316,11 +316,11 @@ class SelfAttention(nn.Module):
         return x
 
     def set_haiku_params(self, params):
-        mlp_params = {key[key.find('/') + 1:]: params.pop(key) for key in list(params.keys()) if
+        mlp_params = {key[key.find("/") + 1:]: params.pop(key) for key in list(params.keys()) if
                       key.startswith("mlp")}
         self.mlp.set_haiku_params(mlp_params)
 
-        attention_params = {key[key.find('/') + 1:]: params.pop(key) for key in list(params.keys()) if
+        attention_params = {key[key.find("/") + 1:]: params.pop(key) for key in list(params.keys()) if
                             key.startswith("attention")}
         self.attention.set_haiku_params(attention_params)
 
@@ -358,7 +358,7 @@ class CrossAttention(nn.Module):
                  num_heads: int = 8,
                  attn_init_scale: float = 1.0,
                  mlp_init_scale: float = 1.0,
-                 shape_for_attn: str = 'kv',
+                 shape_for_attn: str = "kv",
                  use_query_residual: bool = True,
                  qk_channels: int = None,
                  v_channels: int = None):
@@ -368,13 +368,13 @@ class CrossAttention(nn.Module):
 
         output_channels = q_in_channels
         if qk_channels is None:
-            if shape_for_attn == 'q':
+            if shape_for_attn == "q":
                 qk_channels = q_in_channels
-            elif shape_for_attn == 'kv':
+            elif shape_for_attn == "kv":
                 qk_channels = kv_in_channels
             else:
-                raise ValueError(f'Unknown value {shape_for_attn} for '
-                                 'shape_for_attention.')
+                raise ValueError(f"Unknown value {shape_for_attn} for "
+                                 "shape_for_attention.")
 
         if v_channels is None:
             v_channels = qk_channels
@@ -440,11 +440,11 @@ class CrossAttention(nn.Module):
         return x
 
     def set_haiku_params(self, params):
-        mlp_params = {key[key.find('/') + 1:]: params.pop(key) for key in list(params.keys()) if
+        mlp_params = {key[key.find("/") + 1:]: params.pop(key) for key in list(params.keys()) if
                       key.startswith("mlp")}
         self.mlp.set_haiku_params(mlp_params)
 
-        attention_params = {key[key.find('/') + 1:]: params.pop(key) for key in list(params.keys()) if
+        attention_params = {key[key.find("/") + 1:]: params.pop(key) for key in list(params.keys()) if
                             key.startswith("attention")}
         self.attention.set_haiku_params(attention_params)
 

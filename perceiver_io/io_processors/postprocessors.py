@@ -53,15 +53,15 @@ class ImagePostprocessor(nn.Module):
             self,
             img_size: Sequence[int],
             input_channels: int = 3,
-            postproc_type: str = 'pixels',
+            postproc_type: str = "pixels",
             spatial_upsample: int = 1,
             temporal_upsample: int = 1,
-            n_outputs: int = -1,  # only relevant for 'conv1x1', 'conv', and 'raft'
+            n_outputs: int = -1,  # only relevant for "conv1x1", "conv", and "raft"
             input_reshape_size: Optional[Sequence[int]] = None):
         super().__init__()
 
-        if postproc_type not in ('conv', 'patches', 'pixels', 'raft', 'conv1x1'):
-            raise ValueError('Invalid postproc_type!')
+        if postproc_type not in ("conv", "patches", "pixels", "raft", "conv1x1"):
+            raise ValueError("Invalid postproc_type!")
 
         # Architecture parameters:
         self._postproc_type = postproc_type
@@ -70,22 +70,22 @@ class ImagePostprocessor(nn.Module):
         self._spatial_upsample = spatial_upsample
         self._input_reshape_size = input_reshape_size
 
-        if self._postproc_type == 'pixels':
+        if self._postproc_type == "pixels":
             # No postprocessing.
             if self._temporal_upsample != 1 or self._spatial_upsample != 1:
-                raise ValueError('Pixels postprocessing should not currently upsample.')
-        elif self._postproc_type == 'conv1x1':
+                raise ValueError("Pixels postprocessing should not currently upsample.")
+        elif self._postproc_type == "conv1x1":
             raise NotImplementedError
-            assert self._temporal_upsample == 1, 'conv1x1 does not upsample in time.'
+            assert self._temporal_upsample == 1, "conv1x1 does not upsample in time."
             if n_outputs == -1:
-                raise ValueError('Expected value for n_outputs')
+                raise ValueError("Expected value for n_outputs")
             self.conv1x1 = hk.Conv2D(
                 n_outputs, kernel_shape=[1, 1],
                 # spatial_downsample is unconstrained for 1x1 convolutions.
                 stride=[self._spatial_upsample, self._spatial_upsample])
-        elif self._postproc_type == 'conv':
+        elif self._postproc_type == "conv":
             if n_outputs == -1:
-                raise ValueError('Expected value for n_outputs')
+                raise ValueError("Expected value for n_outputs")
             if self._temporal_upsample != 1:
                 raise NotImplementedError
 
@@ -109,7 +109,7 @@ class ImagePostprocessor(nn.Module):
                 [inputs.shape[0]] + list(self._input_reshape_size)
                 + [inputs.shape[-1]])
 
-        if self._postproc_type == 'conv' or self._postproc_type == 'raft':
+        if self._postproc_type == "conv" or self._postproc_type == "raft":
             # Convnet image featurization.
             has_temp_dim = len(inputs.shape) == 5
 
@@ -125,9 +125,9 @@ class ImagePostprocessor(nn.Module):
             if len(inputs.shape) == 5 and self._temporal_upsample == 1:
                 inputs = inputs.view(b, t, *inputs.shape[1:])
 
-        elif self._postproc_type == 'conv1x1':
+        elif self._postproc_type == "conv1x1":
             inputs = self.conv1x1(inputs)
-        elif self._postproc_type == 'patches':
+        elif self._postproc_type == "patches":
             inputs = reverse_space_to_depth(
                 inputs, self._temporal_upsample, self._spatial_upsample)
 
@@ -139,13 +139,13 @@ class AudioPostprocessor(nn.Module):
 
     def __init__(
             self,
-            postproc_type: str = 'patches',  # 'conv', 'patches', 'pixels',
+            postproc_type: str = "patches",  # "conv", "patches", "pixels",
             in_channels: int = 1024,
             samples_per_patch: int = 96):
         super().__init__()
 
-        if postproc_type not in ('patches',):
-            raise ValueError('Invalid postproc_type!')
+        if postproc_type not in ("patches",):
+            raise ValueError("Invalid postproc_type!")
 
         # Architecture parameters:
         self._postproc_type = postproc_type

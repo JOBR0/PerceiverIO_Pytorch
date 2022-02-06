@@ -33,8 +33,8 @@ def plot_flow_legend(size = 500):
     plt.yticks(x_positions, x_labels)
 
     # ax = plt.gca()
-    # ax.spines['left'].set_position(('data', 0))
-    # ax.spines['bottom'].set_position(('data', 0))
+    # ax.spines["left"].set_position(("data", 0))
+    # ax.spines["bottom"].set_position(("data", 0))
 
     plt.show()
 
@@ -139,8 +139,8 @@ def flow_to_image(flow_uv, clip_flow=None, convert_to_bgr=False):
     Returns:
         np.ndarray: Flow visualization image of shape [H,W,3]
     """
-    assert flow_uv.ndim == 3, 'input flow must have three dimensions'
-    assert flow_uv.shape[2] == 2, 'input flow must have shape [H,W,2]'
+    assert flow_uv.ndim == 3, "input flow must have three dimensions"
+    assert flow_uv.shape[2] == 2, "input flow must have shape [H,W,2]"
     if clip_flow is not None:
         flow_uv = np.clip(flow_uv, 0, clip_flow)
     u = flow_uv[:,:,0]
