@@ -62,10 +62,17 @@ class ImagePreprocessor(nn.Module):
     """Image preprocessing for Perceiver Encoder.
     Args:
         img_size (Sequence[int]): The size of the image to be processed (HxW).
+        num_frames (int): The number of frames to be processed.
         input_channels (int): The number of channels of the input image. Default: 3.
         prep_type (str): How to process data ("conv" | "patches" | "pixels" | "conv1x1"). Default: "conv"
         spatial_downsample (int): Factor by which to downsample spatial dimensions. Default: 4
         temporal_downsample (int): Factor by which to downsample temporal dimensiton (e.g. video). Default: 1
+        position_encoding_type (PosEncodingType): The type of position encoding to use. Default: PosEncodingType.FOURIER
+        n_extra_pos_mlp (int): Number of linear layers that are applied to the positional encoding. Default: 0
+        num_channels (int): Number of output_channels. Default: 64
+        conv_after_patching: (bool) Whether to apply 1x1 conv after patching. Default: False
+        conv_2d_use_batchnorm (bool): Whether to use batchnorm for "conv" preprocessing. Default: True
+        concat_or_add_pos (str): Whether to concatenate or add the positional encoding. Default: "concat"
         """
 
     def __init__(
@@ -138,9 +145,14 @@ class ImagePreprocessor(nn.Module):
 
         # Stack MLPs to get a deeper positional embedding.
         self._n_extra_pos_mlp = n_extra_pos_mlp
-        # TODO
-        if n_extra_pos_mlp != 0:
-            raise NotImplementedError
+        if self._n_extra_pos_mlp > 0:
+            self._extra_pos_mlps = nn.ModuleList()
+            for i in range(self._n_extra_pos_mlp):
+                linear = nn.Linear(in_features=self._positional_encoding.n_output_channels(),
+                                   out_features=self._positional_encoding.n_output_channels())
+                lecun_normal_(linear.weight)
+                nn.init.constant_(linear.bias, 0)
+                self._extra_pos_mlps.append(linear)
 
         if self._conv_after_patching:
             self._conv_after_patch_layer = nn.Linear(input_channels * spatial_downsample * temporal_downsample,
@@ -179,10 +191,10 @@ class ImagePreprocessor(nn.Module):
         pos_enc = self._positional_encoding(batch_size=batch_size, pos=pos)
         pos_enc = pos_enc.to(inputs.device)
 
-        # for i in range(0, self._n_extra_pos_mlp):
-        #     pos_enc += hk.Linear(pos_enc.shape[-1])(pos_enc)
-        #     if i < (self._n_extra_pos_mlp - 1):
-        #         pos_enc = F.relu(pos_enc)
+        for i in range(0, self._n_extra_pos_mlp):
+            pos_enc = pos_enc + self._extra_pos_mlps[i](pos_enc.shape[-1])(pos_enc)
+            if i < (self._n_extra_pos_mlp - 1):
+                pos_enc = F.relu(pos_enc)
 
         if not network_input_is_1d:
             # Reshape pos to match the input feature shape
