@@ -60,8 +60,6 @@ class PerceiverEncoder(nn.Module):
             raise ValueError(f"num_z_channels ({num_latent_channels}) must be divisible by"
                              f" num_cross_attend_heads ({num_cross_attend_heads}).")
 
-        self._input_is_1d = True
-
         self._num_blocks = num_blocks
 
         # Construct the latent array initial state.
@@ -328,38 +326,36 @@ class Perceiver(nn.Module):
             inputs = {"default": inputs}
 
         if self._multi_preprocessor is not None:
-            network_input_is_1d = self._encoder._input_is_1d
-            inputs, modality_sizes, inputs_without_pos = self._multi_preprocessor(
-                inputs, pos=pos,
-                network_input_is_1d=network_input_is_1d)
+            inputs, preprocessed_sizes, inputs_without_pos = self._multi_preprocessor(
+                inputs, pos=pos)
         else:
-            modality_sizes = None
+            preprocessed_sizes = None
             inputs_without_pos = None
 
         # Get the queries for encoder and decoder cross-attends.
         encoder_query = self._encoder.latents(inputs)
-        decoder_query = self.decoder_query(
-            inputs, modality_sizes, inputs_without_pos,
+        decoder_query, query_sizes = self.decoder_query(
+            inputs, preprocessed_sizes, inputs_without_pos,
             subsampled_points=subsampled_output_points)
 
         # Run the network forward:
         latents = self._encoder(inputs, encoder_query, input_mask=input_mask)
         # _, output_modality_sizes = self._decoder.output_shape(inputs)
-        # output_modality_sizes = output_modality_sizes or modality_sizes
+        # output_modality_sizes = output_modality_sizes or preprocessed_sizes
 
-        output_modality_sizes = modality_sizes
-        if subsampled_output_points is not None:
-            for modality in subsampled_output_points.keys():
-                if subsampled_output_points[modality] is not None:
-                    output_modality_sizes[modality] = subsampled_output_points[modality].shape[0]
+        # output_modality_sizes = preprocessed_sizes
+        # if subsampled_output_points is not None:
+        #     for modality in subsampled_output_points.keys():
+        #         if subsampled_output_points[modality] is not None:
+        #             output_modality_sizes[modality] = subsampled_output_points[modality].shape[0]
 
         outputs = self._decoder(decoder_query, latents, query_mask=query_mask)
 
         if self._output_postprocessors:
             if type(outputs) == torch.Tensor:
                 # Slice up modalities by their sizes.
-                assert modality_sizes is not None
-                outputs = restructure(modality_sizes=output_modality_sizes, inputs=outputs)
+                assert preprocessed_sizes is not None
+                outputs = restructure(modality_sizes=query_sizes, inputs=outputs)
             outputs = {modality: postprocessor(
                 outputs[modality], pos=None, modality_sizes=None)
                 for modality, postprocessor in self._output_postprocessors.items()}
@@ -377,12 +373,22 @@ class Perceiver(nn.Module):
         # Obtain modality-specific decoders' queries
         subsampled_points = subsampled_points or dict()
         decoder_queries = dict()
+
+        if self._output_queries.keys() != inputs.keys():
+            # if there are some queries without inputs, create empty input for batch_size and device info
+            fist_input = list(inputs.values())[0]
+            batch_size = fist_input.shape[0]
+            dummy_input = torch.zeros((batch_size, 0), device=fist_input.device)
+
         for modality, output_query in self._output_queries.items():
             # Get input_without_pos for this modality if it exists.
             input_without_pos = None
             if inputs_without_pos is not None:
                 input_without_pos = inputs_without_pos.get(modality, None)
-            query = output_query(inputs[modality],
+            inputs_for_query = inputs.get(modality)
+            if inputs_for_query is None:
+                inputs_for_query = dummy_input
+            query = output_query(inputs_for_query,
                                  inputs_without_pos=input_without_pos,
                                  subsampled_points=subsampled_points.get(modality, None))
 
@@ -396,11 +402,11 @@ class Perceiver(nn.Module):
 
             decoder_queries[modality] = query
 
+        query_sizes = {m: decoder_queries[m].shape[1] for m in decoder_queries.keys()}
+        query = torch.cat([decoder_queries[modality] for modality in sorted(decoder_queries.keys())], dim=1)
+
         # Apply a predictable ordering to the modalities
-        return torch.cat([
-            decoder_queries[modality]
-            for modality in sorted(decoder_queries.keys())
-        ], dim=1)
+        return query, query_sizes
 
     def set_haiku_params(self, params):
         for modality in self.padding_embeddings.keys():
@@ -492,8 +498,7 @@ class MultimodalPreprocessor(nn.Module):
         return self._common_channels
 
     def forward(self, inputs: torch.Tensor, *,
-                pos: Optional[torch.Tensor] = None,
-                network_input_is_1d: bool = True) -> PreprocessorOutputT:
+                pos: Optional[torch.Tensor] = None,) -> PreprocessorOutputT:
         if self._preprocessors is None:
             outputs = inputs
             inputs_without_pos = inputs
@@ -502,8 +507,7 @@ class MultimodalPreprocessor(nn.Module):
             inputs_without_pos = {}
             for modality, preprocessor in self._preprocessors.items():
                 outputs[modality], inputs_without_pos[modality] = preprocessor(
-                    inputs[modality], pos=pos,
-                    network_input_is_1d=network_input_is_1d)
+                    inputs[modality], pos=pos)
 
         if self.padding_embeddings is not None:
             modality_sizes = {}

@@ -37,8 +37,7 @@ class EmbeddingPreprocessor(nn.Module):
         return self._output_channels
 
     def forward(self, inputs: torch.Tensor, *,
-                pos: Optional[torch.Tensor] = None,
-                network_input_is_1d: bool = True) -> PreprocessorOutputT:
+                pos: Optional[torch.Tensor] = None) -> PreprocessorOutputT:
         batch_size = inputs.shape[0]
 
         embedding_inputs = self.embed(inputs)
@@ -177,13 +176,12 @@ class ImagePreprocessor(nn.Module):
         return self.output_channels
 
     def _build_network_inputs(
-            self, inputs: torch.Tensor, pos: torch.Tensor,
-            network_input_is_1d: bool = True) -> Tuple[torch.Tensor, torch.Tensor]:
+            self, inputs: torch.Tensor, pos: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """Construct the final input, including position encoding."""
         batch_size = inputs.shape[0]
 
         # Reshape input features to a 1D index dimension if necessary.
-        if len(inputs.shape) > 3 and network_input_is_1d:
+        if len(inputs.shape) > 3:
             inputs = torch.reshape(
                 inputs, [batch_size, np.prod(self.index_dims), -1])
 
@@ -196,12 +194,6 @@ class ImagePreprocessor(nn.Module):
             if i < (self._n_extra_pos_mlp - 1):
                 pos_enc = F.relu(pos_enc)
 
-        if not network_input_is_1d:
-            # Reshape pos to match the input feature shape
-            # if the network takes non-1D inputs
-            sh = inputs.shape
-            pos_enc = torch.reshape(pos_enc, list(sh)[:-1] + [-1])
-
         if self._concat_or_add_pos == "concat":
             inputs_with_pos = torch.cat([inputs, pos_enc], dim=-1)
         elif self._concat_or_add_pos == "add":
@@ -211,8 +203,7 @@ class ImagePreprocessor(nn.Module):
 
     def forward(
             self, inputs: torch.Tensor, *,
-            pos=None,
-            network_input_is_1d: bool = True) -> PreprocessorOutputT:
+            pos=None) -> PreprocessorOutputT:
         """inputs should have pytorch image shape [.., channel, height, width]"""
         if self._prep_type in ["conv", "conv1x1"]:
 
@@ -266,7 +257,7 @@ class ImagePreprocessor(nn.Module):
                 raise ValueError("Unsupported data format for pixels.")
 
         inputs, inputs_without_pos = self._build_network_inputs(
-            inputs, pos, network_input_is_1d)
+            inputs, pos)
         return inputs, inputs_without_pos
 
     def set_haiku_params(self, params, state=None):
@@ -317,8 +308,7 @@ class OneHotPreprocessor(nn.Module):
         return self.input_channels
 
     def forward(self, inputs: torch.Tensor, *,
-                pos: Optional[torch.Tensor] = None,
-                network_input_is_1d: bool = True) -> PreprocessorOutputT:
+                pos: Optional[torch.Tensor] = None) -> PreprocessorOutputT:
         # Add a dummy index dimension.
         inputs = inputs[:, None, :]
 
@@ -401,8 +391,7 @@ class AudioPreprocessor(nn.Module):
         return inputs_with_pos, inputs
 
     def forward(self, inputs: torch.Tensor, *,
-                pos: Optional[torch.Tensor] = None,
-                network_input_is_1d: bool = True) -> PreprocessorOutputT:
+                pos: Optional[torch.Tensor] = None) -> PreprocessorOutputT:
         inputs = torch.reshape(inputs, [inputs.shape[0], -1,
                                         self._samples_per_patch])
 
