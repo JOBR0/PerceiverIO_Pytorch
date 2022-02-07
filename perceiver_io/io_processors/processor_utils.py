@@ -1,4 +1,3 @@
-import warnings
 from typing import Any, Callable, Mapping, Optional, Sequence, Tuple
 
 import einops
@@ -9,8 +8,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from utils.utils import conv_output_shape, same_padding, init_conv_from_haiku, \
-    init_batchnorm_from_haiku
+from utils.utils import conv_output_shape, same_padding
 
 ModalitySizeT = Mapping[str, int]
 PreprocessorOutputT = Tuple[torch.Tensor, Optional[torch.Tensor], torch.Tensor]
@@ -180,30 +178,6 @@ class Conv2DDownsample(nn.Module):
             out = F.max_pool2d(out, kernel_size=3, stride=2)
 
         return out
-
-    def set_haiku_params(self, params, state):
-        params = {key[key.find("/") + 1:]: params[key] for key in params.keys()}
-        state = {key[key.find("/") + 1:]: state[key] for key in state.keys()}
-
-        for l, conv in enumerate(self.convs):
-            suffix = "" if l == 0 else f"_{l}"
-            name = "conv" + suffix
-            init_conv_from_haiku(conv, params.pop(name))
-            if self.norms is not None:
-                name = "batchnorm" + suffix
-
-                norm_state = {key[key.find("/") + 1:]: state.pop(key) for key in list(state.keys()) if
-                              key.startswith(name)}
-
-                norm_state = {key[key.find("/") + 1:]: norm_state[key] for key in norm_state.keys()}
-
-                init_batchnorm_from_haiku(self.norms[l], params.pop(name), norm_state)
-
-        if len(params) != 0:
-            warnings.warn(f"Some parameters couldn't be matched to model: {params.keys()}")
-
-        if len(state) != 0:
-            warnings.warn(f"Some state variables couldn't be matched to model: {state.keys()}")
 
 # class Conv2DUpsample(nn.Module):
 #     """Upsamples 4x using 2 2D transposed convolutions."""

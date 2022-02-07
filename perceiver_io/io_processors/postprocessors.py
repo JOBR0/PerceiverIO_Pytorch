@@ -1,4 +1,3 @@
-import warnings
 from typing import Mapping, Optional, Sequence
 
 from timm.models.layers import lecun_normal_
@@ -8,7 +7,6 @@ import torch
 import torch.nn as nn
 
 from perceiver_io.io_processors.processor_utils import ModalitySizeT, reverse_space_to_depth
-from utils.utils import init_linear_from_haiku
 
 
 class EmbeddingPostprocessor(nn.Module):
@@ -34,10 +32,6 @@ class EmbeddingPostprocessor(nn.Module):
             self._embedding.weight.T)
         output = output + self.bias
         return output.reshape([batch_size, seq_len, self._vocab_size])
-
-    def set_haiku_params(self, params):
-        with torch.no_grad():
-            self.bias.copy_(torch.from_numpy(params["bias"]).float())
 
 
 class ImagePostprocessor(nn.Module):
@@ -154,11 +148,6 @@ class AudioPostprocessor(nn.Module):
         out = self.linear(inputs)
         return torch.reshape(out, [inputs.shape[0], -1])
 
-    def set_haiku_params(self, params):
-        init_linear_from_haiku(self.linear, params.pop("linear"))
-        if len(params) != 0:
-            warnings.warn(f"Some parameters couldn't be matched to model: {params.keys()}")
-
 
 class IdentityPostprocessor(nn.Module):
     """Passes through the inputs unchanged."""
@@ -197,11 +186,6 @@ class ClassificationPostprocessor(nn.Module):
             logits = inputs
         return logits[:, 0, :]
 
-    def set_haiku_params(self, params):
-        init_linear_from_haiku(self.linear, params.pop("linear"))
-        if len(params) != 0:
-            warnings.warn(f"Some parameters couldn't be matched to model: {params.keys()}")
-
 
 class ProjectionPostprocessor(nn.Module):
     """Projection postprocessing for Perceiver."""
@@ -222,11 +206,6 @@ class ProjectionPostprocessor(nn.Module):
                 modality_sizes: Optional[ModalitySizeT] = None) -> torch.Tensor:
         logits = self.projection(inputs)
         return logits
-
-    def set_haiku_params(self, params):
-        init_linear_from_haiku(self.projection, params.pop("linear"))
-        if len(params) != 0:
-            warnings.warn(f"Some parameters couldn't be matched to model: {params.keys()}")
 
 
 class FlowPostprocessor(nn.Module):

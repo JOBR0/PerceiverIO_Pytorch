@@ -1,13 +1,10 @@
 import math
-import warnings
 
 import torch.nn as nn
 import torch.nn.functional as F
 import torch
 
 from timm.models.layers import variance_scaling_
-
-from utils.utils import init_linear_from_haiku, init_layer_norm_from_haiku
 
 
 def make_cross_attention_mask(query_mask, kv_mask):
@@ -182,15 +179,6 @@ class Attention(nn.Module):
 
         return summed
 
-    def set_haiku_params(self, params):
-        init_linear_from_haiku(self.proj_q, params.pop("linear"))
-        init_linear_from_haiku(self.proj_k, params.pop("linear_1"))
-        init_linear_from_haiku(self.proj_v, params.pop("linear_2"))
-        init_linear_from_haiku(self.final, params.pop("linear_3"))
-
-        if len(params) != 0:
-            warnings.warn(f"Some parameters couldn't be matched to model: {params.keys()}")
-
 
 class MLP(nn.Module):
     """A Transformer-style dense module to follow attention.
@@ -226,13 +214,6 @@ class MLP(nn.Module):
         x = F.gelu(x)
         x = self.fc2(x)
         return self.dropout(x)
-
-    def set_haiku_params(self, params):
-        init_linear_from_haiku(self.fc1, params.pop("linear"))
-        init_linear_from_haiku(self.fc2, params.pop("linear_1"))
-
-        if len(params) != 0:
-            warnings.warn(f"Some parameters couldn't be matched to model: {params.keys()}")
 
 
 class SelfAttention(nn.Module):
@@ -314,21 +295,6 @@ class SelfAttention(nn.Module):
             return attention_matrix, x
 
         return x
-
-    def set_haiku_params(self, params):
-        mlp_params = {key[key.find("/") + 1:]: params.pop(key) for key in list(params.keys()) if
-                      key.startswith("mlp")}
-        self.mlp.set_haiku_params(mlp_params)
-
-        attention_params = {key[key.find("/") + 1:]: params.pop(key) for key in list(params.keys()) if
-                            key.startswith("attention")}
-        self.attention.set_haiku_params(attention_params)
-
-        init_layer_norm_from_haiku(self.layer_norm1, params.pop("layer_norm"))
-        init_layer_norm_from_haiku(self.layer_norm2, params.pop("layer_norm_1"))
-
-        if len(params) != 0:
-            warnings.warn(f"Some parameters couldn't be matched to model: {params.keys()}")
 
 
 class CrossAttention(nn.Module):
@@ -438,19 +404,3 @@ class CrossAttention(nn.Module):
             return attention_matrix, x
 
         return x
-
-    def set_haiku_params(self, params):
-        mlp_params = {key[key.find("/") + 1:]: params.pop(key) for key in list(params.keys()) if
-                      key.startswith("mlp")}
-        self.mlp.set_haiku_params(mlp_params)
-
-        attention_params = {key[key.find("/") + 1:]: params.pop(key) for key in list(params.keys()) if
-                            key.startswith("attention")}
-        self.attention.set_haiku_params(attention_params)
-
-        init_layer_norm_from_haiku(self.layer_norm_q, params.pop("layer_norm"))
-        init_layer_norm_from_haiku(self.layer_norm_kv, params.pop("layer_norm_1"))
-        init_layer_norm_from_haiku(self.layer_norm2, params.pop("layer_norm_2"))
-
-        if len(params) != 0:
-            warnings.warn(f"Some parameters couldn't be matched to model: {params.keys()}")

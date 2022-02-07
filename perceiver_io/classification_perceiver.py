@@ -1,5 +1,3 @@
-import pickle
-import warnings
 from enum import Enum
 from typing import Sequence
 
@@ -125,37 +123,6 @@ class ClassificationPerceiver(nn.Module):
             perceiver_decoder_kwargs=perceiver_decoder_kwargs,
             final_project_out_channels=num_classes,
             output_postprocessors=output_postprocessor)
-
-    def load_haiku_params(self, file):
-        with open(file, "rb") as f:
-            dict = pickle.loads(f.read())
-            params = dict["params"]
-            state = dict["state"]
-            # convert to dict
-            state = {key: state[key] for key in state}
-            encoder_params = {key[key.find("/") + 1:]: params.pop(key) for key in list(params.keys()) if
-                              key.startswith("perceiver_encoder")}
-            self.perceiver._encoder.set_haiku_params(encoder_params)
-
-            decoder_params = {key[key.find("basic_decoder/") + len("basic_decoder/"):]: params.pop(key) for key in
-                              list(params.keys()) if
-                              key.startswith("classification_decoder")}
-
-            query_params = {key: decoder_params.pop(key) for key in list(decoder_params.keys()) if
-                            key.startswith("~")}
-
-            self.perceiver._output_queries["__default"].set_haiku_params(query_params)
-            self.perceiver._decoder.set_haiku_params(decoder_params)
-
-            preprocessor_params = {key[key.find("/") + 1:]: params.pop(key) for key in list(params.keys()) if
-                                   key.startswith("image_preprocessor")}
-            preprocessor_state = {key[key.find("/") + 1:]: state.pop(key) for key in list(state.keys()) if
-                                  key.startswith("image_preprocessor")}
-            self.perceiver._multi_preprocessor._preprocessors["__default"].set_haiku_params(preprocessor_params,
-                                                                                          preprocessor_state)
-
-            if len(params) != 0:
-                warnings.warn(f"Some parameters couldn't be matched to model: {params.keys()}")
 
     def forward(self, img: torch.Tensor):
         """

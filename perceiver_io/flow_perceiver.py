@@ -1,6 +1,4 @@
 import itertools
-import pickle
-import warnings
 from typing import Sequence
 
 import torch.nn as nn
@@ -99,25 +97,6 @@ class FlowPerceiver(nn.Module):
             output_postprocessors=postprocessor,)
 
         self.H, self.W = to_2tuple(img_size)
-
-    def load_haiku_params(self, file):
-        """Loads the original haiku checkpoint. Requires haiku to be installed."""
-        with open(file, "rb") as f:
-            params = pickle.loads(f.read())
-            encoder_params = {key[key.find("/") + 1:]: params.pop(key) for key in list(params.keys()) if
-                              key.startswith("perceiver_encoder")}
-            self.perceiver._encoder.set_haiku_params(encoder_params)
-            decoder_params = {key[key.find("basic_decoder/") + len("basic_decoder/"):]: params.pop(key) for key in
-                              list(params.keys()) if
-                              key.startswith("flow_decoder")}
-            self.perceiver._decoder.set_haiku_params(decoder_params)
-
-            preprocessor_params = {key[key.find("/") + 1:]: params.pop(key) for key in list(params.keys()) if
-                                   key.startswith("image_preprocessor")}
-            self.perceiver._multi_preprocessor._preprocessors["__default"].set_haiku_params(preprocessor_params)
-
-            if len(params) != 0:
-                warnings.warn(f"Some parameters couldn't be matched to model: {params.keys()}")
 
     def compute_grid_indices(self, image_shape: tuple, min_overlap: int):
         """

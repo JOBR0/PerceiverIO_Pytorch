@@ -1,5 +1,4 @@
 import math
-import warnings
 from typing import Optional, Sequence, Tuple
 
 from timm.models.layers import lecun_normal_, trunc_normal_
@@ -12,7 +11,6 @@ import torch.nn.functional as F
 from perceiver_io import position_encoding
 from perceiver_io.io_processors.processor_utils import Conv2DDownsample, space_to_depth
 from perceiver_io.position_encoding import PosEncodingType, TrainablePositionEncoding
-from utils.utils import init_linear_from_haiku, init_conv_from_haiku, init_embedding_from_haiku
 
 PreprocessorOutputT = Tuple[torch.Tensor, torch.Tensor]
 
@@ -54,14 +52,6 @@ class EmbeddingPreprocessor(nn.Module):
         embeddings_with_pos_encoding = embedding_inputs + input_pos_encoding
 
         return embeddings_with_pos_encoding, embedding_inputs
-
-    def set_haiku_params(self, params):
-        self.input_pos_encoding.set_haiku_params(params.pop("trainable_position_encoding"))
-
-        init_embedding_from_haiku(self.embed, params.pop("embed"))
-
-        if len(params) != 0:
-            warnings.warn(f"Some parameters couldn't be matched to model: {params.keys()}")
 
 
 class ImagePreprocessor(nn.Module):
@@ -266,41 +256,6 @@ class ImagePreprocessor(nn.Module):
         inputs, inputs_without_pos = self._build_network_inputs(
             inputs, pos)
         return inputs, inputs_without_pos
-
-    def set_haiku_params(self, params, state=None):
-        params = {key[key.find("/") + 1:]: params[key] for key in params.keys()}
-
-        if state is not None:
-            state = {key[key.find("/") + 1:]: state[key] for key in state.keys()}
-
-        if self._prep_type == "conv":
-            conv2_d_downsample_params = {key[key.find("/") + 1:]: params.pop(key) for key in list(params.keys()) if
-                                         key.startswith("conv2_d_downsample")}
-            conv2_d_downsample_state = {key[key.find("/") + 1:]: state.pop(key) for key in list(state.keys()) if
-                                        key.startswith("conv2_d_downsample")}
-            self.convnet.set_haiku_params(conv2_d_downsample_params, conv2_d_downsample_state)
-        elif self._prep_type == "conv1x1":
-            init_conv_from_haiku(self.convnet_1x1, params.pop("conv2_d"))
-
-        position_encoding_projector = {key[key.find("/") + 1:]: params.pop(key) for key in list(params.keys()) if
-                                       key.startswith("position_encoding_projector")}
-
-        if len(position_encoding_projector) > 0:
-            if self._position_encoding_type == PosEncodingType.TRAINABLE:
-                self._positional_encoding.set_haiku_params(position_encoding_projector,
-                                                           params.pop("trainable_position_encoding"))
-            else:
-                self._positional_encoding.set_haiku_params(position_encoding_projector)
-
-
-        elif self._position_encoding_type == "trainable":
-            self.pos_enc.set_haiku_params(params.pop("trainable_position_encoding"))
-
-        if self._conv_after_patching:
-            init_linear_from_haiku(self._conv_after_patch_layer, params.pop("patches_linear"))
-
-        if len(params) != 0:
-            warnings.warn(f"Some parameters couldn't be matched to model: {params.keys()}")
 
 
 class OneHotPreprocessor(nn.Module):

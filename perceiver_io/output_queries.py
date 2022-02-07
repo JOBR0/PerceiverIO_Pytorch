@@ -1,4 +1,3 @@
-import warnings
 from typing import Sequence, Union
 
 import torch
@@ -80,15 +79,6 @@ class BasicQuery(nn.Module):
                 pos_emb = torch.cat([inputs_without_pos, pos_emb], dim=-1)
 
         return pos_emb
-
-    def set_haiku_params(self, params):
-        if self._position_encoding_type == PosEncodingType.TRAINABLE:
-            params = {key[key.find("/") + 1:]: params[key] for key in params.keys()}
-
-            self._position_encoding.set_haiku_params(params.pop("trainable_position_encoding"))
-
-        if len(params) != 0:
-            warnings.warn(f"Some parameters couldn't be matched to model: {params.keys()}")
 
 
 class TrainableQuery(BasicQuery):

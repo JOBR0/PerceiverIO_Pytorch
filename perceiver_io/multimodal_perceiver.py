@@ -1,5 +1,3 @@
-import pickle
-import warnings
 from typing import Sequence
 
 import torch.nn as nn
@@ -135,54 +133,6 @@ class MultiModalPerceiver(nn.Module):
             input_padding_channels=4,
             output_query_padding_channels=2,
             input_mask_probs={"image": 0.0, "audio": 0.0, "label": 1.0}, )
-
-    def load_haiku_params(self, file):
-        with open(file, "rb") as f:
-            params = pickle.loads(f.read())
-            encoder_params = {key[key.find("/") + 1:]: params.pop(key) for key in list(params.keys()) if
-                              key.startswith("encoder")}
-
-            self.perceiver._encoder.set_haiku_params(encoder_params)
-
-            multimodal_decoder_params = {key[key.find("/") + 1:]: params.pop(key) for key in list(params.keys()) if
-                                         key.startswith("multimodal_decoder")}
-            multimodal_decoder_params = {key[key.find("/") + 1:]: multimodal_decoder_params[key] for key in
-                                         multimodal_decoder_params.keys()}
-
-            basic_decoder_params = {key[key.find("/") + 1:]: multimodal_decoder_params.pop(key) for key in
-                                    list(multimodal_decoder_params.keys()) if
-                                    key.startswith("basic_decoder")}
-            self.perceiver._decoder.set_haiku_params(basic_decoder_params)
-            self.perceiver.set_haiku_params(multimodal_decoder_params)
-
-            preprocessor_params = {key[key.find("/") + 1:]: params.pop(key) for key in list(params.keys()) if
-                                   key.startswith("multimodal_preprocessor")}
-
-            self.perceiver._multi_preprocessor.set_haiku_params(preprocessor_params)
-
-            classification_decoder_params = {key[key.find("/") + 1 + len("~/basic_decoder/"):]: params.pop(key) for key
-                                             in list(params.keys()) if
-                                             key.startswith("classification_decoder")}
-
-            self.perceiver._output_queries["label"].set_haiku_params(classification_decoder_params)
-
-            projection_postprocessor_params = {key[key.find("/") + 1:]: params.pop(key) for key in list(params.keys())
-                                               if
-                                               key.startswith("projection_postprocessor")}
-
-            audio_postprocessor_params = {key[key.find("/") + 1:]: params.pop(key) for key in list(params.keys()) if
-                                          key.startswith("audio_postprocessor")}
-
-            classification_postprocessor_params = {key[key.find("/") + 1:]: params.pop(key) for key in
-                                                   list(params.keys()) if
-                                                   key.startswith("classification_postprocessor")}
-
-            self.perceiver._output_postprocessors["label"].set_haiku_params(classification_postprocessor_params)
-            self.perceiver._output_postprocessors["audio"].set_haiku_params(audio_postprocessor_params)
-            self.perceiver._output_postprocessors["image"].set_haiku_params(projection_postprocessor_params)
-
-            if len(params) != 0:
-                warnings.warn(f"Some parameters couldn't be matched to model: {params.keys()}")
 
     def forward(self, images: torch.Tensor, audio: torch.Tensor, n_chunks: int = 128):
         """"""

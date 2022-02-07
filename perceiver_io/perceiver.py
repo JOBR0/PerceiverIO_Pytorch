@@ -1,4 +1,3 @@
-import warnings
 from typing import Mapping, Dict, Optional, Union
 
 import numpy as np
@@ -9,7 +8,6 @@ from timm.models.layers import lecun_normal_
 from perceiver_io import position_encoding
 from perceiver_io.io_processors.processor_utils import PreprocessorT, PreprocessorOutputT
 from perceiver_io.transformer_primitives import CrossAttention, SelfAttention, make_cross_attention_mask
-from utils.utils import init_linear_from_haiku
 
 
 class PerceiverEncoder(nn.Module):
@@ -108,26 +106,6 @@ class PerceiverEncoder(nn.Module):
                 latents = self_attend(latents)
         return latents
 
-    def set_haiku_params(self, params):
-        params = {key[key.find("/") + 1:]: params[key] for key in params.keys()}
-
-        cross_attention_params = {key[key.find("/") + 1:]: params.pop(key) for key in list(params.keys()) if
-                                  key.startswith("cross_attention")}
-        self.cross_attend.set_haiku_params(cross_attention_params)
-
-        for i, self_attend in enumerate(self.self_attends):
-            suffix = "" if i == 0 else f"_{i}"
-            name = "self_attention" + suffix + "/"
-            self_attention_params = {key[key.find("/") + 1:]: params.pop(key) for key in list(params.keys()) if
-                                     key.startswith(name)}
-            self_attend.set_haiku_params(self_attention_params)
-
-        pos_encoding_params = params.pop("trainable_position_encoding")
-        self.latent_pos_enc.set_haiku_params(pos_encoding_params)
-
-        if len(params) != 0:
-            warnings.warn(f"Some parameters couldn't be matched to model: {params.keys()}")
-
 
 class PerceiverDecoder(nn.Module):
     """Cross-attention-based decoder.
@@ -200,18 +178,6 @@ class PerceiverDecoder(nn.Module):
         if self._final_project:
             output = self.final_layer(output)
         return output
-
-    def set_haiku_params(self, params):
-        cross_attention_params = {key[key.find("/") + 1:]: params.pop(key) for key in list(params.keys()) if
-                                  key.startswith("cross_attention")}
-
-        self.decoding_cross_attn.set_haiku_params(cross_attention_params)
-
-        if self._final_project:
-            init_linear_from_haiku(self.final_layer, params.pop("output"))
-
-        if len(params) != 0:
-            warnings.warn(f"Some parameters couldn't be matched to model: {params.keys()}")
 
 
 class PerceiverIO(nn.Module):
@@ -400,13 +366,6 @@ class PerceiverIO(nn.Module):
         # Apply a predictable ordering to the modalities
         return query, query_sizes
 
-    def set_haiku_params(self, params):
-        for modality in self.padding_embeddings.keys():
-            self.padding_embeddings[modality].set_haiku_params(params.pop(f"{modality}_padding"))
-
-        if len(params) != 0:
-            warnings.warn(f"Some parameters couldn't be matched to model: {params.keys()}")
-
 
 def restructure(modality_sizes: Mapping[str, int],
                 inputs: torch.Tensor) -> Mapping[str, torch.Tensor]:
@@ -538,12 +497,3 @@ class MultimodalPreprocessor(nn.Module):
         return (torch.cat(outputs, dim=1),
                 modality_sizes,
                 inputs_without_pos)
-
-    def set_haiku_params(self, params):
-        for modality in self._preprocessors.keys():
-            self.padding_embeddings[modality].set_haiku_params(params.pop(f"{modality}_padding"))
-            if self._mask_probs is not None:
-                self.mask_tokens[modality].set_haiku_params(params.pop(f"{modality}_mask_token"))
-
-        if len(params) != 0:
-            warnings.warn(f"Some parameters couldn't be matched to model: {params.keys()}")

@@ -2,15 +2,12 @@
 
 import abc
 import math
-import warnings
 from enum import Enum
 
 import numpy as np
 import torch
 import torch.nn as nn
 from timm.models.layers import trunc_normal_, lecun_normal_
-
-from utils.utils import init_linear_from_haiku
 
 
 class PosEncodingType(Enum):
@@ -126,10 +123,6 @@ class TrainablePositionEncoding(AbstractPositionEncoding):
     def n_output_channels(self):
         return self._output_channels
 
-    def set_haiku_params(self, params):
-        with torch.no_grad():
-            self.pos_embs.copy_(torch.from_numpy(params["pos_embs"]).float())
-
 
 def _check_or_build_spatial_positions(pos, index_dims, batch_size):
     """Checks or builds spatial position features (x, y, ...).
@@ -212,14 +205,6 @@ class PositionEncodingProjector(AbstractPositionEncoding):
 
     def n_output_channels(self):
         return self._output_channels
-
-    def set_haiku_params(self, params, base_params=None):
-        init_linear_from_haiku(self._projector, params.pop("linear"))
-        if base_params is not None:
-            self._base_position_encoding.set_haiku_params(base_params)
-
-        if len(params) != 0:
-            warnings.warn(f"Some parameters couldn't be matched to model: {params.keys()}")
 
 
 def build_position_encoding(
