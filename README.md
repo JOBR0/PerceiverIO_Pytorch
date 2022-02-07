@@ -89,6 +89,7 @@ Several output_queries can be found in `perceiver_io/output_queries.py`
 ###Multiple modalities
 To process multiple modalities at once, a dictionary with a mapping from modality to the module can be used for the input_preprocessors, output_postprocessors and the output_queries (see perceiver_io/multimodal_perceiver.py).
 To make the different inputs compatible with each other, they are padded to the same channel size with trainable parameters.
+It is also possible to use a different number of output queries than inputs are given.
 
 
 
