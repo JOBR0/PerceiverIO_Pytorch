@@ -10,13 +10,20 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from perceiver_io import position_encoding
-from perceiver_io.io_processors.processor_utils import PreprocessorOutputT, Conv2DDownsample, space_to_depth
+from perceiver_io.io_processors.processor_utils import Conv2DDownsample, space_to_depth
 from perceiver_io.position_encoding import PosEncodingType, TrainablePositionEncoding
 from utils.utils import init_linear_from_haiku, init_conv_from_haiku, init_embedding_from_haiku
 
+PreprocessorOutputT = Tuple[torch.Tensor, torch.Tensor]
+
 
 class EmbeddingPreprocessor(nn.Module):
-    """Preprocessor for Language Embedding."""
+    """Preprocessor for Language Embedding.
+        Args:
+            vocab_size (int): Size of the vocabulary.
+            max_seq_len (int): Maximum sequence length.
+            embedding_dims (int): Embedding dimension.
+    """
 
     def __init__(self,
                  vocab_size: int,
@@ -72,6 +79,7 @@ class ImagePreprocessor(nn.Module):
         conv_after_patching: (bool) Whether to apply 1x1 conv after patching. Default: False
         conv_2d_use_batchnorm (bool): Whether to use batchnorm for "conv" preprocessing. Default: True
         concat_or_add_pos (str): Whether to concatenate or add the positional encoding. Default: "concat"
+        **position_encoding_kwargs: Keyword arguments for position encoding.
         """
 
     def __init__(
@@ -128,7 +136,7 @@ class ImagePreprocessor(nn.Module):
                 out_channels=num_channels,
                 kernel_size=1,
                 # spatial_downsample is unconstrained for 1x1 convolutions.
-                stride=[spatial_downsample, spatial_downsample])
+                stride=(spatial_downsample, spatial_downsample))
             trunc_normal_(self.convnet_1x1.weight, mean=0.0, std=0.01)
             nn.init.constant_(self.convnet_1x1.bias, 0)
 
@@ -226,7 +234,6 @@ class ImagePreprocessor(nn.Module):
             if has_temp_dim:
                 inputs = inputs.view(b, t, *inputs.shape[1:])
 
-
         elif self._prep_type == "patches":
             # Move channel dimension to the end
             inputs = inputs.movedim(-3, -1)
@@ -297,7 +304,10 @@ class ImagePreprocessor(nn.Module):
 
 
 class OneHotPreprocessor(nn.Module):
-    """One-hot preprocessor for Perceiver Encoder."""
+    """One-hot preprocessor for Perceiver Encoder.
+        Args:
+            input_channels (int): Number of input channels.
+    """
 
     def __init__(self,
                  input_channels: int, ):
