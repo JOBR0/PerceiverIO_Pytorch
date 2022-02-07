@@ -67,7 +67,9 @@ class PerceiverIO(nn.Module):
         input_mask_probs (dict): Probability with which each input modality will be masked out. Default None,
     """
 ```
-The following is a diagram of the PerceiverIO for a multimodal application.
+The following is a diagram of the PerceiverIO for a multimodal application:
+
+
 <img src="./PerceiverIOPytorch.svg">
 
 ### Input preprocessors (optional)
