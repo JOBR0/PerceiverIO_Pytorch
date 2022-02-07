@@ -11,6 +11,7 @@ from perceiver_io.io_processors.processor_utils import PreprocessorT, Preprocess
 from perceiver_io.transformer_primitives import CrossAttention, SelfAttention, make_cross_attention_mask
 from utils.utils import init_linear_from_haiku
 
+
 class PerceiverEncoder(nn.Module):
     """The Perceiver Encoder: a scalable, fully attentional encoder.
         The encoder has a total of num_self_attends_per_block * num_blocks self-attend layers. We share weights between blocks.
@@ -152,7 +153,7 @@ class PerceiverDecoder(nn.Module):
                  use_query_residual: bool = False,
                  output_w_init: str = "lecun_normal",
                  num_heads: int = 1,
-                 final_project: bool = True,):
+                 final_project: bool = True, ):
         super().__init__()
 
         self._output_num_channels = final_project_out_channels
@@ -185,11 +186,6 @@ class PerceiverDecoder(nn.Module):
             else:
                 raise ValueError(f"{self._output_w_init} not supported as output_w_init")
             nn.init.constant_(self.final_layer.bias, 0)
-
-    # def output_shape(self, inputs):
-    #     return ((inputs[0], self._subsampled_index_dims, self._output_num_channels),
-    #             None)
-
 
     def forward(self, query, latents, *, query_mask=None):
         # Cross-attention decoding.
