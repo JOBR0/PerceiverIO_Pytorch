@@ -61,7 +61,7 @@ def multimodal_example():
     video = load_video(video_path)
 
     # Visualize inputs
-    show_animation(video)
+    show_animation(video, title="Input Video")
     FRAMES_PER_SECOND = 25
     SAMPLING_RATE = 48000  # Hz
     NUM_FRAMES = 16
@@ -116,10 +116,10 @@ def multimodal_example():
     scores, indices = torch.topk(F.softmax(reconstruction["label"], dim=-1), 5)
 
     for score, index in zip(scores[0], indices[0]):
-        print(f"{KINETICS_CLASSES[index]}: {score.item()}")
+        print(f"{KINETICS_CLASSES[index]}: {score.item() * 100:.1f}%")
 
     # Visualize reconstruction of first 16 frames
-    show_animation(np.clip(reconstruction["image"][0].movedim(-3, -1).cpu().numpy(), 0, 1))
+    show_animation(np.clip(reconstruction["image"][0].movedim(-3, -1).cpu().numpy(), 0, 1), title="Reconstruction First 16 Frames")
 
     # Auto-encode the entire video, one chunk at a time
 
@@ -139,7 +139,6 @@ def multimodal_example():
             video_input = torch.from_numpy(video_chunks[None, i]).movedim(-1, -3).float().to(device)
             audio_input = torch.from_numpy(audio_chunks[None, i, :, 0:1]).float().to(device)
             output = perceiver(video_input, audio_input)
-            # output = perceiver(video_chunks[None, i], audio_chunks[None, i, :, 0:1])
 
             reconstruction["image"].append(output["image"])
             reconstruction["audio"].append(output["audio"])
@@ -163,10 +162,10 @@ def multimodal_example():
     scores, indices = torch.topk(F.softmax(reconstruction["label"], dim=-1), 5)
 
     for score, index in zip(scores[0], indices[0]):
-        print(f"{KINETICS_CLASSES[index]}: {score.item()}")
+        print(f"{KINETICS_CLASSES[index]}: {score.item() * 100:.1f}%")
 
     # Visualize reconstruction of entire video
-    show_animation(np.clip(reconstruction["image"][0].movedim(-3, -1).cpu().numpy(), 0, 1))
+    show_animation(np.clip(reconstruction["image"][0].movedim(-3, -1).cpu().numpy(), 0, 1), title="Reconstruction Entire Video")
 
 if __name__ == "__main__":
     multimodal_example()
