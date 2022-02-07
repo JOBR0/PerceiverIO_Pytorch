@@ -259,7 +259,7 @@ class Perceiver(nn.Module):
             final_project_out_channels = num_latent_channels
 
         if type(input_channels) is int:
-            input_channels = {"default": input_channels}
+            input_channels = {"default": input_channels} # TODO change default to None
 
         # convert to ModuleDict to register all modules
         if type(input_preprocessors) is dict:
@@ -340,14 +340,6 @@ class Perceiver(nn.Module):
 
         # Run the network forward:
         latents = self._encoder(inputs, encoder_query, input_mask=input_mask)
-        # _, output_modality_sizes = self._decoder.output_shape(inputs)
-        # output_modality_sizes = output_modality_sizes or preprocessed_sizes
-
-        # output_modality_sizes = preprocessed_sizes
-        # if subsampled_output_points is not None:
-        #     for modality in subsampled_output_points.keys():
-        #         if subsampled_output_points[modality] is not None:
-        #             output_modality_sizes[modality] = subsampled_output_points[modality].shape[0]
 
         outputs = self._decoder(decoder_query, latents, query_mask=query_mask)
 
