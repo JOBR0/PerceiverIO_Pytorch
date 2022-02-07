@@ -8,9 +8,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import ArtistAnimation
 
+
 def dump_pickle(obj, file_path):
     with open(file_path, "wb") as f:
         pickle.dump(obj, f)
+
 
 def load_pickle(file_path):
     with open(file_path, "rb") as f:
@@ -22,22 +24,23 @@ def load_image(imfile, device):
     img = torch.from_numpy(img).permute(2, 0, 1).float()
     return img[None].to(device)
 
-def show_animation(images: np.ndarray, fps: int = 30):
+
+def show_animation(images: np.ndarray, fps: int = 25, title="animation"):
     interval = 1000 / fps
 
     frames = []  # for storing the generated images
-    fig = plt.figure()
+    fig = plt.figure(title)
     for i in range(images.shape[0]):
         frames.append([plt.imshow(images[i], animated=True)])
 
     ani = ArtistAnimation(fig, frames, interval=interval, blit=True,
-                                    repeat_delay=1000)
+                          repeat_delay=1000)
     plt.show()
 
 
 def unravel_index(
-    indices: torch.LongTensor,
-    shape: Tuple[int, ...],
+        indices: torch.LongTensor,
+        shape: Tuple[int, ...],
 ) -> torch.LongTensor:
     r"""Converts flat indices into unraveled coordinates in a target shape.
 
@@ -154,7 +157,7 @@ def init_layer_norm_from_haiku(layer_norm: torch.nn.LayerNorm, haiku_params):
 
 def init_conv_from_haiku(conv_layer: torch.nn.Conv2d, haiku_params):
     with torch.no_grad():
-        conv_layer.weight.copy_(torch.from_numpy(haiku_params["w"].T.swapaxes(-1,-2)).float())
+        conv_layer.weight.copy_(torch.from_numpy(haiku_params["w"].T.swapaxes(-1, -2)).float())
         if "b" in haiku_params:
             # TODO check if transpose is needed (not relevant for orignal models)
             conv_layer.bias.copy_(torch.from_numpy(haiku_params["b"].T).float())
