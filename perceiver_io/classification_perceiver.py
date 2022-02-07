@@ -9,7 +9,7 @@ import torch
 from perceiver_io.io_processors.postprocessors import ClassificationPostprocessor
 from perceiver_io.io_processors.preprocessors import ImagePreprocessor
 from perceiver_io.output_queries import TrainableQuery
-from perceiver_io.perceiver import Perceiver
+from perceiver_io.perceiver import PerceiverIO
 
 from perceiver_io.position_encoding import PosEncodingType
 
@@ -114,7 +114,7 @@ class ClassificationPerceiver(nn.Module):
             project=False
         )
 
-        self.perceiver = Perceiver(
+        self.perceiver = PerceiverIO(
             num_blocks=num_blocks,
             num_self_attends_per_block=num_self_attends_per_block,
             num_latents=num_latents,
@@ -144,14 +144,14 @@ class ClassificationPerceiver(nn.Module):
             query_params = {key: decoder_params.pop(key) for key in list(decoder_params.keys()) if
                             key.startswith("~")}
 
-            self.perceiver._output_queries["default"].set_haiku_params(query_params)
+            self.perceiver._output_queries["__default"].set_haiku_params(query_params)
             self.perceiver._decoder.set_haiku_params(decoder_params)
 
             preprocessor_params = {key[key.find("/") + 1:]: params.pop(key) for key in list(params.keys()) if
                                    key.startswith("image_preprocessor")}
             preprocessor_state = {key[key.find("/") + 1:]: state.pop(key) for key in list(state.keys()) if
                                   key.startswith("image_preprocessor")}
-            self.perceiver._multi_preprocessor._preprocessors["default"].set_haiku_params(preprocessor_params,
+            self.perceiver._multi_preprocessor._preprocessors["__default"].set_haiku_params(preprocessor_params,
                                                                                           preprocessor_state)
 
             if len(params) != 0:

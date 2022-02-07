@@ -214,8 +214,8 @@ class PerceiverDecoder(nn.Module):
             warnings.warn(f"Some parameters couldn't be matched to model: {params.keys()}")
 
 
-class Perceiver(nn.Module):
-    """The Perceiver: a scalable, fully attentional architecture.
+class PerceiverIO(nn.Module):
+    """The PerceiverIO: a scalable, fully attentional architecture.
     Args:
         num_blocks (int): Number of times the block is applied with shared weights. Default: 8
         num_self_attends_per_block (int): Number of self-attentions in the block. Default: 6,

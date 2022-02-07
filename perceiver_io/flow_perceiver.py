@@ -9,7 +9,7 @@ import torch
 from perceiver_io.io_processors.preprocessors import ImagePreprocessor
 from perceiver_io.io_processors.processor_utils import patches_for_flow
 from perceiver_io.output_queries import FlowQuery
-from perceiver_io.perceiver import Perceiver
+from perceiver_io.perceiver import PerceiverIO
 from timm.models.layers import to_2tuple
 
 import torch.nn.functional as F
@@ -86,7 +86,7 @@ class FlowPerceiver(nn.Module):
             flow_scale_factor=flow_scale_factor
         )
 
-        self.perceiver = Perceiver(
+        self.perceiver = PerceiverIO(
             final_project_out_channels=2,
             num_blocks=num_blocks,
             num_self_attends_per_block=num_self_attends_per_block,
@@ -114,7 +114,7 @@ class FlowPerceiver(nn.Module):
 
             preprocessor_params = {key[key.find("/") + 1:]: params.pop(key) for key in list(params.keys()) if
                                    key.startswith("image_preprocessor")}
-            self.perceiver._multi_preprocessor._preprocessors["default"].set_haiku_params(preprocessor_params)
+            self.perceiver._multi_preprocessor._preprocessors["__default"].set_haiku_params(preprocessor_params)
 
             if len(params) != 0:
                 warnings.warn(f"Some parameters couldn't be matched to model: {params.keys()}")

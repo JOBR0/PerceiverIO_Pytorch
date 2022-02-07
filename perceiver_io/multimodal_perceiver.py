@@ -9,7 +9,7 @@ from perceiver_io.io_processors.postprocessors import AudioPostprocessor, Projec
     ClassificationPostprocessor
 from perceiver_io.io_processors.preprocessors import AudioPreprocessor, ImagePreprocessor, OneHotPreprocessor
 from perceiver_io.output_queries import FourierQuery, TrainableQuery
-from perceiver_io.perceiver import Perceiver
+from perceiver_io.perceiver import PerceiverIO
 from perceiver_io.position_encoding import PosEncodingType
 
 
@@ -124,7 +124,7 @@ class MultiModalPerceiver(nn.Module):
             "image": image_out_query,
             "label": label_out_query, }
 
-        self.perceiver = Perceiver(
+        self.perceiver = PerceiverIO(
             num_self_attends_per_block=num_self_attends_per_block,
             num_blocks=num_blocks,
             num_latents=num_latents,

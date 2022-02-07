@@ -7,7 +7,7 @@ import torch
 from perceiver_io.io_processors.postprocessors import EmbeddingPostprocessor
 from perceiver_io.io_processors.preprocessors import EmbeddingPreprocessor
 from perceiver_io.output_queries import TrainableQuery
-from perceiver_io.perceiver import Perceiver
+from perceiver_io.perceiver import PerceiverIO
 
 
 class LanguagePerceiver(nn.Module):
@@ -60,7 +60,7 @@ class LanguagePerceiver(nn.Module):
         )
         output_postprocessor = EmbeddingPostprocessor(input_preprocessor.embed)
 
-        self.perceiver = Perceiver(
+        self.perceiver = PerceiverIO(
             final_project=False,
             num_self_attends_per_block=num_self_attends_per_block,
             num_blocks=num_blocks,
@@ -86,13 +86,13 @@ class LanguagePerceiver(nn.Module):
             query_params = {key: decoder_params.pop(key) for key in list(decoder_params.keys()) if
                             key.startswith("~")}
 
-            self.perceiver._output_queries["default"].set_haiku_params(query_params)
+            self.perceiver._output_queries["__default"].set_haiku_params(query_params)
 
             self.perceiver._decoder.set_haiku_params(decoder_params)
 
-            self.perceiver._output_postprocessors["default"].set_haiku_params(params.pop("embedding_decoder"))
+            self.perceiver._output_postprocessors["__default"].set_haiku_params(params.pop("embedding_decoder"))
 
-            self.perceiver._multi_preprocessor._preprocessors["default"].set_haiku_params(params)
+            self.perceiver._multi_preprocessor._preprocessors["__default"].set_haiku_params(params)
 
             # init_embedding_from_haiku(self.embed, params.pop("embed"))
 

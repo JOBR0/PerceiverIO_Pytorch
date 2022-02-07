@@ -42,11 +42,11 @@ The pytorch checkpoints should be placed in the 'pytorch_checkpoints' folder so 
 
 ## Usage
 
-To create a new preceiver IO for a custom task, the Perceiver class in perceiver_io/perceiver.py is used.
+To create a new preceiverIO for a custom task, the Perceiver class in perceiver_io/perceiver.py is used.
 
 
 ```python
-class Perceiver(nn.Module):
+class PerceiverIO(nn.Module):
     """The Perceiver: a scalable, fully attentional architecture.
     Args:
         num_blocks (int): Number of times the block is applied with shared weights. Default: 8
