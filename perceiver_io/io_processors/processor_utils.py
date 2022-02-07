@@ -20,6 +20,24 @@ PostprocessorT = Callable[..., Any]
 PreprocessorOutputT = Tuple[torch.Tensor, Optional[torch.Tensor], torch.Tensor]
 
 
+def space_to_depth(
+        frames: torch.Tensor,
+        temporal_block_size: int = 1,
+        spatial_block_size: int = 1) -> torch.Tensor:
+    """Reduces spatial and/or temporal dimensions by stacking features in the channel dimension."""
+    if len(frames.shape) == 4:
+        return einops.rearrange(
+            frames, "b (h dh) (w dw) c -> b h w (dh dw c)",
+            dh=spatial_block_size, dw=spatial_block_size)
+    elif len(frames.shape) == 5:
+        return einops.rearrange(
+            frames, "b (t dt) (h dh) (w dw) c -> b t h w (dt dh dw c)",
+            dt=temporal_block_size, dh=spatial_block_size, dw=spatial_block_size)
+    else:
+        raise ValueError(
+            "Frames should be of rank 4 (batch, height, width, channels)"
+            " or rank 5 (batch, time, height, width, channels)")
+
 
 def reverse_space_to_depth(
         frames: torch.Tensor,
@@ -33,25 +51,6 @@ def reverse_space_to_depth(
     elif len(frames.shape) == 5:
         return einops.rearrange(
             frames, "b t h w (dt dh dw c) -> b (t dt) (h dh) (w dw) c",
-            dt=temporal_block_size, dh=spatial_block_size, dw=spatial_block_size)
-    else:
-        raise ValueError(
-            "Frames should be of rank 4 (batch, height, width, channels)"
-            " or rank 5 (batch, time, height, width, channels)")
-
-
-def space_to_depth(
-        frames: torch.Tensor,
-        temporal_block_size: int = 1,
-        spatial_block_size: int = 1) -> torch.Tensor:
-    """Space to depth transform."""
-    if len(frames.shape) == 4:
-        return einops.rearrange(
-            frames, "b (h dh) (w dw) c -> b h w (dh dw c)",
-            dh=spatial_block_size, dw=spatial_block_size)
-    elif len(frames.shape) == 5:
-        return einops.rearrange(
-            frames, "b (t dt) (h dh) (w dw) c -> b t h w (dt dh dw c)",
             dt=temporal_block_size, dh=spatial_block_size, dw=spatial_block_size)
     else:
         raise ValueError(
