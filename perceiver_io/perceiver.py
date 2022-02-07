@@ -259,14 +259,14 @@ class Perceiver(nn.Module):
             final_project_out_channels = num_latent_channels
 
         if type(input_channels) is int:
-            input_channels = {"default": input_channels} # TODO change default to None
+            input_channels = {"__default": input_channels}
 
         # convert to ModuleDict to register all modules
         if type(input_preprocessors) is dict:
             input_preprocessors = nn.ModuleDict(input_preprocessors)
         elif issubclass(type(input_preprocessors), nn.Module):
             # Single preprocessor
-            input_preprocessors = nn.ModuleDict({"default": input_preprocessors})
+            input_preprocessors = nn.ModuleDict({"__default": input_preprocessors})
 
         self._multi_preprocessor = MultimodalPreprocessor(input_preprocessors=input_preprocessors,
                                                           mask_probs=input_mask_probs,
@@ -278,7 +278,7 @@ class Perceiver(nn.Module):
             output_postprocessors = nn.ModuleDict(output_postprocessors)
         elif issubclass(type(output_postprocessors), nn.Module):
             # Single preprocessor
-            output_postprocessors = nn.ModuleDict({"default": output_postprocessors})
+            output_postprocessors = nn.ModuleDict({"__default": output_postprocessors})
         self._output_postprocessors = output_postprocessors
 
         # convert to ModuleDict to register all modules
@@ -286,7 +286,7 @@ class Perceiver(nn.Module):
             output_queries = nn.ModuleDict(output_queries)
         elif issubclass(type(output_queries), nn.Module):
             # Single preprocessor
-            output_queries = nn.ModuleDict({"default": output_queries})
+            output_queries = nn.ModuleDict({"__default": output_queries})
         self._output_queries = output_queries
 
         query_channels = (
@@ -323,7 +323,7 @@ class Perceiver(nn.Module):
 
         if type(inputs) is torch.Tensor:
             # Single input
-            inputs = {"default": inputs}
+            inputs = {"__default": inputs}
 
         if self._multi_preprocessor is not None:
             inputs, preprocessed_sizes, inputs_without_pos = self._multi_preprocessor(
@@ -352,9 +352,9 @@ class Perceiver(nn.Module):
                 outputs[modality], pos=None, modality_sizes=None)
                 for modality, postprocessor in self._output_postprocessors.items()}
 
-        if type(outputs) is not torch.Tensor and list(outputs.keys()) == ["default"]:
+        if type(outputs) is not torch.Tensor and list(outputs.keys()) == ["__default"]:
             # return tensor directly if input was given as tensor
-            outputs = outputs["default"]
+            outputs = outputs["__default"]
 
         return outputs
 
