@@ -26,6 +26,7 @@ class ClassificationPerceiver(nn.Module):
     Args:
         num_classes (int): Number of classes. Default: 1000.
         img_size (Sequence[int]): Size of images [H, W]. Default: (224, 224).
+        img_channels (int): Number of image channels. Default: 3.
         prep_type (str): Preprocessing type. Default: PrepType.FOURIER_POS_CONVNET.
     """
 
@@ -126,8 +127,6 @@ class ClassificationPerceiver(nn.Module):
             encoder_params = {key[key.find("/") + 1:]: params.pop(key) for key in list(params.keys()) if
                               key.startswith("perceiver_encoder")}
             self.perceiver._encoder.set_haiku_params(encoder_params)
-            # decoder_params = {key[key.find("/") + 1:]: params.pop(key) for key in list(params.keys()) if
-            #                   key.startswith("classification_decoder")}
 
             decoder_params = {key[key.find("basic_decoder/") + len("basic_decoder/"):]: params.pop(key) for key in
                               list(params.keys()) if

@@ -13,12 +13,17 @@ from perceiver_io.perceiver import Perceiver
 class LanguagePerceiver(nn.Module):
     """
     LanguagePerceiver: Perceiver for masked language modeling.
+    Args:
+        vocab_size (int): size of the vocabulary. Default: 262
+        max_seq_len (int): maximum length of the sequence. Default: 2048
+        num_latent_channels (int): number of channels for the latent vectors. Default: 1280
+        embed_dim (int): output dimensionality of the input embedding. Default: 768
     """
 
     def __init__(self,
                  vocab_size: int = 262,
                  max_seq_len: int = 2048,
-                 latent_channels=1280,
+                 num_latent_channels: int = 1280,
                  embed_dim: int = 768):
         super().__init__()
 
@@ -26,7 +31,7 @@ class LanguagePerceiver(nn.Module):
             num_self_attend_heads=8,
             num_cross_attend_heads=8,
             qk_channels=8 * 32,
-            v_channels=latent_channels,
+            v_channels=num_latent_channels,
             use_query_residual=True, )
 
         perceiver_decoder_kwargs = dict(
@@ -53,7 +58,7 @@ class LanguagePerceiver(nn.Module):
             num_self_attends_per_block=26,
             num_blocks=1,
             num_latents=256,
-            num_latent_channels=latent_channels,
+            num_latent_channels=num_latent_channels,
             input_preprocessors=input_preprocessor,
             output_postprocessors=output_postprocessor,
             perceiver_encoder_kwargs=perceiver_encoder_kwargs,

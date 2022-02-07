@@ -15,7 +15,15 @@ from perceiver_io.position_encoding import PosEncodingType
 
 class MultiModalPerceiver(nn.Module):
     """
-    MultiModalPerceiver: Perceiver for autoencoding video data.
+    MultiModalPerceiver: Perceiver for auto-encoding video data.
+    Args:
+        img_size (Sequence[int]): Size of the image. Default: (224, 224)
+        img_channels (int): Number of channels of the image. Default: 3
+        num_frames (int): Number of frames to use for the video. Default: 16
+        num_classes (int): Number of possible classes. Default: 700
+        audio_samples_per_frame (int): Number of audio samples per video frame. Default: 128
+        audio_samples_per_patch (int): Number of audio samples that are combined as a patch. Default: 16
+        num_latent_channel (int): Number of channels of the latent vectors. Default: 512
     """
 
     def __init__(

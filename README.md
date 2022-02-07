@@ -15,7 +15,7 @@ cd PerceiverIO_Pytorch
 
 - Create a virtual environment and activate it:
 ```bash
-python -m venv perceiverEnv
+python3 -m venv perceiverEnv
 source perceiverEnv/bin/activate
 ```
 
@@ -24,7 +24,7 @@ https://pytorch.org/get-started/locally/
 
 - Install other required packages from requirements.txt:
 ```bash
-pip install -r requirements.txt
+pip3 install -r requirements.txt
 ```
 
 ## Examples

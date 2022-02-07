@@ -24,7 +24,8 @@ class FlowPerceiver(nn.Module):
     FlowPerceiver: Perceiver for optical flow
     Args:
         img_size (Sequence[int]): Size of training images (height x width). Default: (368, 496)
-        flow_scale_factor (int): https://github.com/deepmind/deepmind-research/issues/266. Default: 20
+        flow_scale_factor (int): Factor by which the output is multiplied
+            https://github.com/deepmind/deepmind-research/issues/266. Default: 0.2
         n_latents (int): Number of latent variables. Default: 2048
         n_latent_channels (int): Number of latent channels. Default: 512
         n_self_attends (int): Number of self attention layers. Default: 24
