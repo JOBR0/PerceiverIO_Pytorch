@@ -25,7 +25,7 @@ def load_image(imfile, device):
     return img[None].to(device)
 
 
-def show_animation(images: np.ndarray, fps: int = 25, title: ="animation"):
+def show_animation(images: np.ndarray, fps: int = 25, title: str = "animation"):
     interval = 1000 / fps
 
     frames = []  # for storing the generated images

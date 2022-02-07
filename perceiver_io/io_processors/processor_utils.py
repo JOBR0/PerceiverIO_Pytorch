@@ -18,8 +18,7 @@ PreprocessorT = Callable[..., PreprocessorOutputT]
 PostprocessorT = Callable[..., Any]
 
 PreprocessorOutputT = Tuple[torch.Tensor, Optional[torch.Tensor], torch.Tensor]
-PreprocessorT = Callable[..., PreprocessorOutputT]
-PostprocessorT = Callable[..., Any]
+
 
 
 def reverse_space_to_depth(

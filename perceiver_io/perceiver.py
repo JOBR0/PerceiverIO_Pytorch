@@ -11,9 +11,6 @@ from perceiver_io.io_processors.processor_utils import PreprocessorT, Preprocess
 from perceiver_io.transformer_primitives import CrossAttention, SelfAttention, make_cross_attention_mask
 from utils.utils import init_linear_from_haiku
 
-ModalitySizeT = Mapping[str, int]
-
-
 class PerceiverEncoder(nn.Module):
     """The Perceiver Encoder: a scalable, fully attentional encoder.
         The encoder has a total of num_self_attends_per_block * num_blocks self-attend layers. We share weights between blocks.
@@ -417,7 +414,7 @@ class Perceiver(nn.Module):
             warnings.warn(f"Some parameters couldn't be matched to model: {params.keys()}")
 
 
-def restructure(modality_sizes: ModalitySizeT,
+def restructure(modality_sizes: Mapping[str, int],
                 inputs: torch.Tensor) -> Mapping[str, torch.Tensor]:
     """Partitions a [B, N, C] tensor into tensors for each modality.
   Args:
