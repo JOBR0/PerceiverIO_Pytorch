@@ -323,7 +323,7 @@ class AudioPreprocessor(nn.Module):
             samples_per_batch: int,
             prep_type: str = "patches",
             samples_per_patch: int = 96,
-            position_encoding_type: str = "fourier",
+            position_encoding_type: PosEncodingType = PosEncodingType.FOURIER,
             n_extra_pos_mlp: int = 0,
             concat_or_add_pos: str = "concat",
             **position_encoding_kwargs):
