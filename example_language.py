@@ -5,7 +5,6 @@ import numpy as np
 
 from perceiver_io.language_perceiver import LanguagePerceiver
 from utils.bytes_tokenizer import BytesTokenizer
-from utils.utils import dump_pickle
 
 
 def pad(max_sequence_length: int, inputs, input_mask, pad_token):
@@ -63,8 +62,6 @@ def language_example():
     # Predict
     with torch.inference_mode():
         out = perceiver(inputs, input_masks=input_mask)
-
-    dump_pickle(out.cpu().numpy(), "temp/output_language_torch.pickle")  # TODO: remove
 
     masked_tokens_predictions = out[0, 51:60].argmax(axis=-1)
     print("Greedy predictions:")

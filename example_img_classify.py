@@ -7,7 +7,7 @@ import torch
 from torchvision import transforms
 
 from perceiver_io.classification_perceiver import ClassificationPerceiver, PrepType
-from utils.utils import load_image, dump_pickle
+from utils.utils import load_image
 from utils.imagenet_labels import IMAGENET_LABELS
 
 import torch.nn.functional as F
@@ -75,8 +75,6 @@ def img_classify_example():
     for i in range(top_probs.shape[1]):
         # print as percentage
         print(f"{top_labels[0, i]}: {top_probs[0, i] * 100:.1f}%")
-
-    dump_pickle(logits.cpu().numpy(), f"temp/output_{str(prep_type)}_torch.pickle") # TODO remove
 
     # Show prediction
     plt.imshow((img[0].permute(1, 2, 0).cpu().numpy() / 255))

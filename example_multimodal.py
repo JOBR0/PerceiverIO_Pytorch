@@ -100,12 +100,6 @@ def multimodal_example():
     with torch.inference_mode():
         reconstruction = perceiver(video_input, audio_input)
 
-    from utils.utils import dump_pickle
-
-    output_torch = {k: reconstruction[k].cpu().numpy() for k in reconstruction.keys()}
-    output_torch["image"] = np.moveaxis(output_torch["image"], -3, -1)
-    dump_pickle(output_torch, "temp/output_multi_torch.pickle")  # TODO remove
-
     # Save outputs
     scipy.io.wavfile.write("sample_data/audio_reconstr_p1.wav", SAMPLING_RATE,
                            (reconstruction["audio"][0].cpu().numpy() * 2 ** 15).astype(np.int16))
@@ -147,10 +141,6 @@ def multimodal_example():
         reconstruction["image"] = torch.cat(reconstruction["image"], dim=1)
         reconstruction["audio"] = torch.cat(reconstruction["audio"], dim=1)
         reconstruction["label"] = torch.cat(reconstruction["label"], dim=1).mean(dim=1)
-
-    output_torch = {k: reconstruction[k].cpu().numpy() for k in reconstruction.keys()}
-    output_torch["image"] = np.moveaxis(output_torch["image"], -3, -1)
-    dump_pickle(output_torch, "temp/output_multi_torch_full.pickle")  # TODO remove
 
     # Save outputs
     scipy.io.wavfile.write("sample_data/audio_reconstr_full.wav", SAMPLING_RATE,
