@@ -2,3 +2,4 @@ einops==0.4.0
 matplotlib==3.5.1
 opencv-python==4.5.5.62
 timm==0.5.4
+scipy==1.7.3
