@@ -76,10 +76,10 @@ def img_classify_example():
         # print as percentage
         print(f"{top_labels[0, i]}: {top_probs[0, i] * 100:.1f}%")
 
-    dump_pickle(logits.numpy(), f"temp/output_{str(prep_type)}_torch.pickle") # TODO remove
+    dump_pickle(logits.cpu().numpy(), f"temp/output_{str(prep_type)}_torch.pickle") # TODO remove
 
     # Show prediction
-    plt.imshow((img[0].permute(1, 2, 0).numpy() / 255))
+    plt.imshow((img[0].permute(1, 2, 0).cpu().numpy() / 255))
     plt.title(f"Label: {top_labels[0]}")
     plt.show()
 
