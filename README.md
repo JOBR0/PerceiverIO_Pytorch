@@ -75,14 +75,17 @@ Input preprocessors take the raw input data and preprocess it so that it can be 
 first cross-attention. This can be e.g. something like creating patches from an image. Usually positional encodings are
 incorporated by the preprocessor. Instead of using a preprocessor, the inputs can also be processed manually.
 
+Several input_preprocessors can be found in `perceiver_io/io_processors/preprocessors.py` 
+
 ### Output postprocessors (optional)
 Output postprocessors take the final output of the perceiver and process it to obtain the desired output format.
 
+Several output_postprocessors can be found in `perceiver_io/io_processors/postprocessors.py` 
 ### Output queries
 Ouput queries create the features that are used to query the final latent representation of the perceiver to produce the output.
 They obtain the preprocessed input as an argument so that they can use it if desired. They also usually incorporate positional encodings.
 
-
+Several output_queries can be found in `perceiver_io/output_queries.py` 
 ###Multiple modalities
 To process multiple modalities at once, a dictionary with a mapping from modality to the module can be used for the input_preprocessors, output_postprocessors and the output_queries (see perceiver_io/multimodal_perceiver.py).
 To make the different inputs compatible with each other, they are padded to the same channel size with trainable parameters.
