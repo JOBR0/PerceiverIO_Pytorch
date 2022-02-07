@@ -23,7 +23,10 @@ class MultiModalPerceiver(nn.Module):
         num_classes (int): Number of possible classes. Default: 700
         audio_samples_per_frame (int): Number of audio samples per video frame. Default: 128
         audio_samples_per_patch (int): Number of audio samples that are combined as a patch. Default: 16
-        num_latent_channel (int): Number of channels of the latent vectors. Default: 512
+        num_self_attends_per_block (int): Number of self attends per block. Default: 8
+        num_blocks (int): Number of blocks. All blocks share weights. Default: 1
+        num_latents (int): Number of latent variables. Default: 784
+        num_latent_channels (int): Number of channels for latent variables. Default: 512
     """
 
     def __init__(
@@ -34,7 +37,10 @@ class MultiModalPerceiver(nn.Module):
             num_classes: int = 700,
             audio_samples_per_frame: int = 48000 // 25,
             audio_samples_per_patch: int = 16,
-            num_latent_channels: int = 512):
+            num_self_attends_per_block: int = 8,
+            num_blocks: int = 1,
+            num_latents: int = 28 * 28 * 1,
+            num_latent_channels: int = 512,):
 
         super().__init__()
 
@@ -119,10 +125,9 @@ class MultiModalPerceiver(nn.Module):
             "label": label_out_query, }
 
         self.perceiver = Perceiver(
-            num_self_attends_per_block=8,
-            # Weights won"t be shared if num_blocks is set to 1.
-            num_blocks=1,
-            num_latents=28 * 28 * 1,
+            num_self_attends_per_block=num_self_attends_per_block,
+            num_blocks=num_blocks,
+            num_latents=num_latents,
             num_latent_channels=num_latent_channels,
             input_preprocessors=input_preprocessors,
             output_postprocessors=output_postprocessors,

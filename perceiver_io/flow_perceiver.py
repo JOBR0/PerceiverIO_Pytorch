@@ -26,9 +26,10 @@ class FlowPerceiver(nn.Module):
         img_size (Sequence[int]): Size of training images (height x width). Default: (368, 496)
         flow_scale_factor (int): Factor by which the output is multiplied
             https://github.com/deepmind/deepmind-research/issues/266. Default: 0.2
-        n_latents (int): Number of latent variables. Default: 2048
+        num_latents (int): Number of latent variables. Default: 2048
         n_latent_channels (int): Number of latent channels. Default: 512
-        n_self_attends (int): Number of self attention layers. Default: 24
+        num_self_attends_per_block (int): Number of self attention layers. Default: 24
+        num_blocks (int): Number of blocks. All blocks share weights. Default: 1
         mixed_precision (bool): Whether to run the perceiver in mixed precision. Default: False
     """
 
@@ -36,9 +37,10 @@ class FlowPerceiver(nn.Module):
             self,
             img_size: Sequence[int] = (368, 496),
             flow_scale_factor: int = 20/100,
-            n_latents: int = 2048,
+            num_latents: int = 2048,
             num_latent_channels=512,
-            n_self_attends: int = 24,
+            num_self_attends_per_block: int = 24,
+            num_blocks: int = 1,
             mixed_precision: bool = False):
         super().__init__()
         self._flow_scale_factor = flow_scale_factor
@@ -86,9 +88,9 @@ class FlowPerceiver(nn.Module):
 
         self.perceiver = Perceiver(
             final_project_out_channels=2,
-            num_blocks=1,
-            num_self_attends_per_block=n_self_attends,
-            num_latents=n_latents,
+            num_blocks=num_blocks,
+            num_self_attends_per_block=num_self_attends_per_block,
+            num_latents=num_latents,
             num_latent_channels=num_latent_channels,
             perceiver_encoder_kwargs=perceiver_encoder_kwargs,
             perceiver_decoder_kwargs=perceiver_decoder_kwargs,

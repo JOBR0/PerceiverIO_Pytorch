@@ -135,10 +135,10 @@ class Conv2DDownsample(nn.Module):
     ):
         """Constructs a Conv2DDownsample model.
     Args:
-      num_layers: The number of conv->max_pool layers.
-      num_channels: The number of conv output channels.
-      use_batchnorm: Whether to use batchnorm.
-      name: Name of the module.
+      num_layers (int): The number of conv->max_pool layers. Default: 1
+      in_channels (int): The number of input channels. Default: 3
+      num_channels (int): The number of conv output channels. Default: 64
+      use_batchnorm (bool): Whether to use batchnorm. Default: True
     """
         super().__init__()
 

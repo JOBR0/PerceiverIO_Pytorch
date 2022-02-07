@@ -16,15 +16,22 @@ class LanguagePerceiver(nn.Module):
     Args:
         vocab_size (int): size of the vocabulary. Default: 262
         max_seq_len (int): maximum length of the sequence. Default: 2048
-        num_latent_channels (int): number of channels for the latent vectors. Default: 1280
         embed_dim (int): output dimensionality of the input embedding. Default: 768
+        num_self_attends_per_block (int): Number of self attends per block. Default: 26
+        num_blocks (int): Number of blocks. All blocks share weights. Default: 1
+        num_latents (int): Number of latent variables. Default: 256
+        num_latent_channels (int): Number of channels for latent variables. Default: 1280
+
     """
 
     def __init__(self,
                  vocab_size: int = 262,
                  max_seq_len: int = 2048,
-                 num_latent_channels: int = 1280,
-                 embed_dim: int = 768):
+                 embed_dim: int = 768,
+                 num_self_attends_per_block: int = 26,
+                 num_blocks: int = 1,
+                 num_latents: int = 256,
+                 num_latent_channels: int = 1280,):
         super().__init__()
 
         perceiver_encoder_kwargs = dict(
@@ -55,9 +62,9 @@ class LanguagePerceiver(nn.Module):
 
         self.perceiver = Perceiver(
             final_project=False,
-            num_self_attends_per_block=26,
-            num_blocks=1,
-            num_latents=256,
+            num_self_attends_per_block=num_self_attends_per_block,
+            num_blocks=num_blocks,
+            num_latents=num_latents,
             num_latent_channels=num_latent_channels,
             input_preprocessors=input_preprocessor,
             output_postprocessors=output_postprocessor,

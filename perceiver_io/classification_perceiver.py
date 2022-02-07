@@ -28,13 +28,22 @@ class ClassificationPerceiver(nn.Module):
         img_size (Sequence[int]): Size of images [H, W]. Default: (224, 224).
         img_channels (int): Number of image channels. Default: 3.
         prep_type (str): Preprocessing type. Default: PrepType.FOURIER_POS_CONVNET.
+        num_self_attends_per_block (int): Number of self attends per block. Default: 6
+        num_blocks (int): Number of blocks. All blocks share weights. Default: 8
+        num_latents (int): Number of latent variables. Default: 512
+        num_latent_channels (int): Number of channels for latent variables. Default: 1024
     """
 
     def __init__(self,
                  num_classes: int = 1000,
                  img_size: Sequence[int] = (224, 224),
                  img_channels: int = 3,
-                 prep_type: PrepType = PrepType.FOURIER_POS_CONVNET):
+                 prep_type: PrepType = PrepType.FOURIER_POS_CONVNET,
+                 num_self_attends_per_block: int = 6,
+                 num_blocks: int = 8,
+                 num_latents: int = 512,
+                 num_latent_channels: int = 1024,
+                 ):
         super().__init__()
 
         if prep_type == PrepType.FOURIER_POS_CONVNET:
@@ -106,10 +115,10 @@ class ClassificationPerceiver(nn.Module):
         )
 
         self.perceiver = Perceiver(
-            num_blocks=8,
-            num_self_attends_per_block=6,
-            num_latents=512,
-            num_latent_channels=1024,
+            num_blocks=num_blocks,
+            num_self_attends_per_block=num_self_attends_per_block,
+            num_latents=num_latents,
+            num_latent_channels=num_latent_channels,
             input_preprocessors=input_preprocessor,
             perceiver_encoder_kwargs=perceiver_encoder_kwargs,
             output_queries=output_query,
