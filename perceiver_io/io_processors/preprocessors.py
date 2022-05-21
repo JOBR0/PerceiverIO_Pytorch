@@ -78,6 +78,7 @@ class ImagePreprocessor(nn.Module):
             num_frames: int = 1,
             input_channels: int = 3,
             prep_type: str = "conv",
+            shared_conv_net: nn.Module = None,
             spatial_downsample: int = 4,
             temporal_downsample: int = 1,
             position_encoding_type: PosEncodingType = PosEncodingType.FOURIER,
@@ -104,31 +105,37 @@ class ImagePreprocessor(nn.Module):
         self._position_encoding_type = position_encoding_type
 
         if self._prep_type == "conv":
-            # Downsampling with conv is currently restricted
-            convnet_num_layers = math.log(spatial_downsample, 4)
-            convnet_num_layers_is_int = (
-                    convnet_num_layers == np.round(convnet_num_layers))
-            if not convnet_num_layers_is_int or temporal_downsample != 1:
-                raise ValueError("Only powers of 4 expected for spatial "
-                                 "and 1 expected for temporal "
-                                 "downsampling with conv.")
+            if shared_conv_net is not None:
+                self.convnet = shared_conv_net
+            else:
+                # Downsampling with conv is currently restricted
+                convnet_num_layers = math.log(spatial_downsample, 4)
+                convnet_num_layers_is_int = (
+                        convnet_num_layers == np.round(convnet_num_layers))
+                if not convnet_num_layers_is_int or temporal_downsample != 1:
+                    raise ValueError("Only powers of 4 expected for spatial "
+                                     "and 1 expected for temporal "
+                                     "downsampling with conv.")
 
-            self.convnet = Conv2DDownsample(
-                in_channels=input_channels,
-                num_layers=int(convnet_num_layers),
-                num_channels=num_channels,
-                use_batchnorm=conv2d_use_batchnorm)
+                self.convnet = Conv2DDownsample(
+                    in_channels=input_channels,
+                    num_layers=int(convnet_num_layers),
+                    num_channels=num_channels,
+                    use_batchnorm=conv2d_use_batchnorm)
 
         elif self._prep_type == "conv1x1":
             assert temporal_downsample == 1, "conv1x1 does not downsample in time."
-            self.convnet_1x1 = nn.Conv2d(
-                in_channels=input_channels,
-                out_channels=num_channels,
-                kernel_size=1,
-                # spatial_downsample is unconstrained for 1x1 convolutions.
-                stride=(spatial_downsample, spatial_downsample))
-            trunc_normal_(self.convnet_1x1.weight, mean=0.0, std=0.01)
-            nn.init.constant_(self.convnet_1x1.bias, 0)
+            if shared_conv_net is not None:
+                self.convnet_1x1 = shared_conv_net
+            else:
+                self.convnet_1x1 = nn.Conv2d(
+                    in_channels=input_channels,
+                    out_channels=num_channels,
+                    kernel_size=1,
+                    # spatial_downsample is unconstrained for 1x1 convolutions.
+                    stride=(spatial_downsample, spatial_downsample))
+                trunc_normal_(self.convnet_1x1.weight, mean=0.0, std=0.01)
+                nn.init.constant_(self.convnet_1x1.bias, 0)
 
         # Dimensions that are indexed by postion encoding
         self.index_dims = [d // spatial_downsample for d in img_size]
