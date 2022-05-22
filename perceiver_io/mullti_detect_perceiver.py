@@ -161,4 +161,4 @@ class MultiDetectPerceiver(nn.Module):
 
         output = {"pred_logits": class_predictions, "pred_boxes": box_predictions}
 
-        return class_predictions, box_predictions
+        return output
