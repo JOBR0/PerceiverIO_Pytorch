@@ -39,10 +39,10 @@ class MultiDetectPerceiver(nn.Module):
                  ):
         super().__init__()
 
-        # TYPE_VEHICLE = 1;
-        # TYPE_PEDESTRIAN = 2;
-        # TYPE_SIGN = 3;
-        # TYPE_CYCLIST = 4
+        # TYPE_VEHICLE = 1; (index 0)
+        # TYPE_PEDESTRIAN = 2; (index 1)
+        # TYPE_SIGN = 3; (index 2)
+        # TYPE_CYCLIST = 4 (index 3)
 
         # TODO (pad inputs)
 
@@ -158,5 +158,7 @@ class MultiDetectPerceiver(nn.Module):
         outputs = self.perceiver(input_dict)
         class_predictions = outputs[:, :, :self.num_classes + 1]
         box_predictions = outputs[:, :, self.num_classes + 1:]
+
+        output = {"pred_logits": class_predictions, "pred_boxes": box_predictions}
 
         return class_predictions, box_predictions
